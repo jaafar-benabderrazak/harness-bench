@@ -81,19 +81,38 @@ def aggregate(df: pd.DataFrame) -> Aggregates:
 
 
 def frontier_chart(agg: Aggregates, out: Path) -> None:
-    df = agg.df_harness
+    """Success-rate vs resource-cost scatter with Wilson CI error bars.
+
+    Picks the x-axis dimension based on what varies: USD when all harnesses have
+    non-zero cost (paid API), wall-clock seconds when all costs are zero (local
+    inference — time is the scarce resource). Falls back to total tokens if both
+    collapse to zero.
+    """
+    df = agg.df_harness.copy()
+    if df["cost_usd"].sum() > 0:
+        x_col, x_label = "cost_usd", "Cost per run matrix (USD)"
+    elif df["wall_clock_s"].sum() > 0:
+        x_col, x_label = "wall_clock_s", "Wall-clock per run matrix (seconds)"
+    else:
+        df["_total_tokens"] = df["input_tokens"] + df["output_tokens"]
+        x_col, x_label = "_total_tokens", "Total tokens per run matrix"
+
     fig, ax = plt.subplots(figsize=(7, 5))
     yerr_low = (df["success_rate"] - df["ci_low"]).clip(lower=0)
     yerr_high = (df["ci_high"] - df["success_rate"]).clip(lower=0)
     ax.errorbar(
-        df["cost_usd"], df["success_rate"],
+        df[x_col], df["success_rate"],
         yerr=[yerr_low, yerr_high],
         fmt="o", capsize=4, markersize=8, elinewidth=1,
     )
-    for _, row in df.iterrows():
-        ax.annotate(row["harness"], (row["cost_usd"], row["success_rate"]),
-                    xytext=(6, 6), textcoords="offset points")
-    ax.set_xlabel("Cost per run matrix (USD)")
+    # Stagger labels vertically by index to avoid overlaps when x values tie.
+    offsets = [(6, 6), (6, -10), (6, 18), (6, -22), (6, 30)]
+    for i, (_, row) in enumerate(df.iterrows()):
+        ax.annotate(
+            row["harness"], (row[x_col], row["success_rate"]),
+            xytext=offsets[i % len(offsets)], textcoords="offset points",
+        )
+    ax.set_xlabel(x_label)
     ax.set_ylabel("Task success rate (Wilson 95% CI)")
     ax.set_title(f"Success vs cost across harnesses — model frozen at {CONFIG.model.name}")
     ax.grid(alpha=0.3)
@@ -293,10 +312,17 @@ def write_article(
         best["success_rate"] / worst["success_rate"]
         if worst["success_rate"] > 0 else float("inf")
     )
-    cost_spread = (
-        df["cost_usd"].max() / df["cost_usd"].min()
-        if df["cost_usd"].min() > 0 else float("inf")
-    )
+    # Pick the resource dimension that actually varies.
+    if df["cost_usd"].min() > 0:
+        resource_name = "cost"
+        resource_spread = df["cost_usd"].max() / df["cost_usd"].min()
+    elif df["wall_clock_s"].min() > 0:
+        resource_name = "wall-clock"
+        resource_spread = df["wall_clock_s"].max() / df["wall_clock_s"].min()
+    else:
+        resource_name = "tokens"
+        totals = df["input_tokens"] + df["output_tokens"]
+        resource_spread = totals.max() / max(totals.min(), 1)
     table_md = _df_to_markdown(df)
     body = f"""# Same model, five harnesses, one benchmark
 
@@ -306,7 +332,7 @@ def write_article(
 
 Five agent harnesses. Same frozen model (`{CONFIG.model.name}`, temperature 0).
 One deterministic HTML-extraction benchmark. Spread in task success rate:
-**{success_spread:.2f}x**. Spread in cost: **{cost_spread:.2f}x**.
+**{success_spread:.2f}x**. Spread in {resource_name}: **{resource_spread:.2f}x**.
 
 The headline is uncomfortable: on this task, harness design dominates model
 choice *within a tier*. Most teams pick the model first and treat the harness

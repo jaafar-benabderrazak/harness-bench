@@ -12,3 +12,4 @@ venv/
 traces/
 results/*
 !results/.gitkeep
+.claude/
