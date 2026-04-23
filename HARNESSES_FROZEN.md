@@ -18,14 +18,20 @@ The entire experiment depends on one invariant: the five harnesses, their shared
 
 | Path | Blob SHA |
 |------|----------|
-| `src/harness_eng/harnesses/base.py` | `15ce725022d41ec5eb9215f296690b702a7acdbf` |
-| `src/harness_eng/harnesses/single_shot.py` | `c3291fe52907323f8cc7608794313725dd8a1907` |
-| `src/harness_eng/harnesses/react.py` | `2ffce6543a69439c290250e54bc0ddf7e50788d1` |
-| `src/harness_eng/harnesses/plan_execute.py` | `ae154a6a67baf0ca99c8e48c9c7c1d15b0c61479` |
-| `src/harness_eng/harnesses/reflexion.py` | `375bd24946c56547b20971474ecbace932f6151c` |
-| `src/harness_eng/harnesses/minimal.py` | `de2e162d68809573b928aef0e49323aca3832c56` |
+| `src/harness_eng/harnesses/base.py` | `1d32af5831414d71d922924d035e6290a854f62e` |
+| `src/harness_eng/harnesses/single_shot.py` | `0b2aa16e412122ebca0ca7ac1ab66e5c41527ce5` |
+| `src/harness_eng/harnesses/react.py` | `2923e22ed7cf0da8e4620ed346f4eaaf0fae67f9` |
+| `src/harness_eng/harnesses/plan_execute.py` | `8740421ed48d0673f1e792a6a104508cba816097` |
+| `src/harness_eng/harnesses/reflexion.py` | `57586a286a8628ef28234703ba856fe8845f467a` |
+| `src/harness_eng/harnesses/minimal.py` | `6ccb0f9e604bb9bd604b2ba1d1cbb7a4ba1716c7` |
 | `src/harness_eng/tools.py` | `fddabd878b3314965074b231b5e75ed0dfd278c1` |
 | `src/harness_eng/model.py` | `4d263754cecf50da47756ab2d19b58ee0da471f6` |
+
+## Tag moves
+
+| Date | From SHA | To SHA | Reason | Invalidated matrix runs |
+|------|----------|--------|--------|------------------------|
+| 2026-04-23 | `0a44719` | (this commit) | Phase 4 added `TOOL_WHITELIST` attrs to every harness class + enforcement in `_step_model`. No matrix had been executed against the prior tag, so the move is a mechanical re-anchor — nothing is invalidated. | None |
 
 ## What can still change post-freeze
 
