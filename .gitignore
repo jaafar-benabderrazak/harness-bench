@@ -8,8 +8,7 @@ venv/
 .ruff_cache/
 .DS_Store
 
-# experiment artifacts
+# experiment artifacts — everything under results/ is run-specific output
 traces/
-results/*.png
-results/runs/
+results/*
 !results/.gitkeep
