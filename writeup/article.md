@@ -49,11 +49,13 @@ On HTML extraction (hard for this model):
 
 ![HTML frontier](frontier-glm-20260423.png)
 
+`single_shot` and `minimal` tied for best at 9/15 success. `single_shot` did it in **228 seconds**; `plan_execute` scored 6/15 and took **1,615 seconds** — 7× the wall-clock for a *worse* result. `reflexion` came last at 3/15 despite spending 977 seconds of wall-clock.
+
 On code generation (easy for this model):
 
 ![code-gen resource bars — who's wasteful when everyone scores 100%](resource_bars-code-glm-20260423.png)
 
-`chain_of_thought` took twice single_shot's wall-clock to score the same 15/15. `test_driven` used 6× the tokens. On the HTML side, `plan_execute` took 9× single_shot's wall-clock to score the same 9/15.
+Every harness hit 15/15 on code-gen. `chain_of_thought` took twice single_shot's wall-clock for the same result. `test_driven` used 6× the input tokens.
 
 Harness complexity costs something. In both experiments, on this model, it didn't buy anything back.
 
@@ -162,7 +164,7 @@ Every harness terminates by calling the same `submit_answer` tool. That's on pur
 
 **Task**: extract 3–5 fields from 5 messy HTML pages (product, job post, event, recipe, paper metadata). Deterministic grader: per-field normalized exact match.
 
-**Result**: `single_shot` and `plan_execute` tied for best at 9/15 success. `single_shot` did it in **217 s** total; `plan_execute` took **1,957 s** — 9× the wall-clock for the same result. `react` scored 2/15 (worst of five; its Wilson CI doesn't overlap the top tier).
+**Result**: `single_shot` and `minimal` tied for best at 9/15 success. `single_shot` did it in **228 s** total; `minimal` took **1,059 s** — 4.6× the wall-clock for the same result. `plan_execute` scored 6/15 despite spending **1,615 seconds**. `reflexion` came last at 3/15 — the critique loop didn't rescue failures, it kept hitting the same SDK-boundary error. Wilson CIs for the top tier (single_shot + minimal) don't overlap `reflexion`'s — that ranking is statistically reliable.
 
 ### Headline chart
 
@@ -182,32 +184,50 @@ Every harness terminates by calling the same `submit_answer` tool. That's on pur
 Every cell ends one of four ways. `single_shot` is pure green (always cleanly submits). `react` is more than half red — hit an `mismatched arg_key` SDK-boundary error on 8/15 cells. `plan_execute` hits the 12-turn cap on 60% of cells because the planner wrote wrong selectors and the executor had no backchannel to revise them.
 
 <details>
-<summary><b>The damning number: 417</b></summary>
+<summary><b>How the multi-turn harnesses burn their turns</b></summary>
 
-Across the whole HTML matrix, `plan_execute` tried the CSS selector `span.date-submitted-date` — **417 times**. That selector does not exist on any page in the benchmark. The planner invented it; the executor fired it into the void 417 times because there's no feedback loop to revise the plan.
+The multi-turn harnesses all share one problem: they try CSS selectors that don't match anything. `NO_MATCH` rates across the full 75-cell matrix:
 
-**87.6% of `plan_execute`'s CSS-select calls returned `NO_MATCH`.** Nearly nine out of ten selectors were wrong. The turn cap is the only thing that stops the loop.
+| harness      | CSS_select calls | fraction returning NO_MATCH |
+|--------------|-----------------:|-----------------------------|
+| minimal      | ~380             | **79.7%**                   |
+| plan_execute | ~160             | **69.7%**                   |
+| react        | ~50              | 61.7%                       |
+| reflexion    | ~40              | 56.0%                       |
 
-Top-5 most-retried selectors by harness (full HTML matrix):
+Roughly two out of three tool calls are wasted guesses. The 12-turn cap is the only thing that stops most of the loops.
+
+Top-3 most-retried selectors per harness (across the whole matrix):
 
 ```text
-plan_execute    417x  span.date-submitted-date      ← retried every paper_01 cell
-                 19x  h1
-                 12x  .brand
-                 12x  .price
-                 10x  [itemprop="price"]
+minimal          13x  h1
+                 12x  span.arxiv-id
+                 11x  span[id*="date"]
 
-minimal           7x  h1
-                  6x  [itemprop="name"], [itemprop="brand"], [itemprop="sku"]
-
-reflexion        14x  .arxiv-id-number, .arxiv-id-text, ...
-                  9x  .brand
+plan_execute     15x  h1
+                  6x  p
+                  6x  p:contains('When:')
 
 react             4x  h1, h2, h3
-                  3x  h1.title, span.primary-category
+                  3x  h1, h2, h3, .headline, .event-title, .main-title
+                  3x  .event-date, .date, .time, .when, .datetime
+
+reflexion         2x  article.event-details, div.event-details, ...
+                  2x  .event, .event-item, .event-container
+                  2x  div, section, main
 ```
 
-None of `plan_execute`'s top-3 selectors actually match any HTML in the benchmark. The model kept guessing anyway because it couldn't see the HTML when writing the plan.
+The shapes tell you the failure mode: `minimal`'s "retry the exact same selector 13 times" pattern is different from `plan_execute`'s "try the planner's guesses then fall back to `p`" or `react`'s "OR-together a dozen maybe-selectors." All of them are a model that can't see the page structure, guessing.
+
+Median turns spent on failure (cells that didn't submit cleanly):
+
+| harness      | median turns burned |
+|--------------|---------------------|
+| plan_execute | 13.0 — hit the cap |
+| react        | 1.0 — mostly errored early |
+| reflexion    | 1.0 — mostly errored early |
+
+`plan_execute` fails LATE (burns the full turn budget); `react` and `reflexion` fail EARLY (first tool call throws an SDK error). Very different cost profiles.
 
 </details>
 
@@ -238,13 +258,27 @@ The summary CSV ships a `seed_success_std` column that flags the flaky ones:
 
 Multi-turn tool loops branch on model stochasticity at every turn; a one-shot call has exactly one branch point. That's why the flippy ones are flippy.
 
+**A second finding got stronger when I re-ran the N=15 matrix later:** even at 3 seeds per cell, `glm-4.7-flash` isn't fully deterministic run-to-run. Two independent N=15 runs produced these:
+
+| harness      | first N=15 run | second N=15 run | Δ     |
+|--------------|---------------:|----------------:|-------|
+| single_shot  | 0.60           | 0.60            | 0.00  |
+| minimal      | 0.27           | **0.60**        | +0.33 |
+| plan_execute | 0.60           | 0.40            | −0.20 |
+| reflexion    | 0.47           | 0.20            | −0.27 |
+| react        | 0.13           | 0.40            | +0.27 |
+
+Run-to-run, on the *same* frozen model and temperature, the success rates swung by up to 0.33. That means this article's specific numbers are this-run-specific, and even N=15 isn't a large enough sample to pin the rankings for this particular model. The **ordering of approximate tiers** is stable across runs (single_shot always near the top, reflexion always near the bottom), but exact ordering of the middle isn't.
+
+For models that need stable rankings in articles or dashboards, N=15 × one run on `glm-4.7-flash` is not enough. You'd want several runs across model instances or seeds >=5 before calling any middle-of-the-pack ranking real.
+
 </details>
 
 ### Where the time went
 
 ![HTML wall-clock heatmap](wall_clock_heatmap-glm-20260423.png)
 
-Every orange/red square is a cell where the harness was running in circles. `plan_execute` on `paper_01` alone burned 254 seconds.
+Every orange/red square is a cell where the harness was running in circles. `plan_execute` burned its turn budget on nearly every task; `minimal` earned its better score this run by also trying more selectors, at a cost of 1,059 seconds total wall-clock.
 
 ---
 
@@ -300,7 +334,7 @@ flowchart TB
     A[task difficulty<br/>for the model] --> B1[hard<br/>HTML extraction]
     A --> B2[easy<br/>code generation]
 
-    B1 --> C1[complex harnesses fail<br/>because model can't sustain<br/>multi-turn tool fidelity<br/>· react 2/15 · plan_execute 60% turn_cap]
+    B1 --> C1[complex harnesses fail<br/>because model can't sustain<br/>multi-turn tool fidelity<br/>· reflexion 3/15 · plan_execute 7× wall-clock<br/>· ~70% NO_MATCH rate on CSS selectors]
 
     B2 --> C2[complex harnesses cost more<br/>because first-shot already wins<br/>· chain_of_thought 2× wall-clock<br/>· test_driven 6× tokens · same 15/15]
 
@@ -319,20 +353,21 @@ On hard tasks, the failure is "extra turns introduce new failure modes faster th
 
 1. **Always run `single_shot` as your baseline.** If it hits your accuracy target, ship it. You will not find a faster, cheaper, more reliable harness.
 2. **Before investing in multi-turn harnesses, check your model's single-shot schema compliance.** Our `glm-4.7-flash` hit 100% compliance on `single_shot` but its multi-turn tool loops drift. If schema compliance is below ~90%, multi-turn harnesses will underperform on that model.
-3. **Never ship a harness comparison at `seeds=1`.** Three of five rankings flipped between N=5 and N=15 in the HTML experiment. Include `seed_success_std` so readers know which rows to trust.
+3. **`seeds=1` is not enough — and on some models, `seeds=3` isn't either.** Three of five rankings flipped between our N=5 pilot and the first N=15 run on HTML. Then two independent N=15 runs of the same matrix moved the middle-of-the-pack rankings by up to 0.33. If the ordering matters, you want multiple independent runs, not just multiple seeds in one run.
 4. **The `submit_answer` universal output channel was load-bearing.** Every harness uses the same submission tool — no free-form text parsing. Eliminates a huge class of weak-model failures.
-5. **`plan_execute` needs a feedback loop from executor to plan.** The rigid split produced a 60% turn_cap rate and **one selector retried 417 times** because the executor couldn't revise the plan. Minimum viable fix: a `revise_plan` tool. Correct fix: let the planner see the HTML.
-6. **Tool-call error handling belongs in the harness, not the SDK.** `ResponseError: mismatched arg_key` propagated as hard termination on 8/15 `react` cells and 5/15 `reflexion` cells. A naive "retry on malformed tool_call" loop would have recovered most of these.
+5. **`plan_execute` needs a feedback loop from executor to plan.** The executor gets `NO_MATCH` back on ~70% of CSS selector calls because the planner writes selectors before seeing the HTML. Minimum viable fix: a `revise_plan` tool. Correct fix: let the planner see the HTML.
+6. **Tool-call error handling belongs in the harness, not the SDK.** `ResponseError: mismatched arg_key` propagated as hard termination on multiple `react` and `reflexion` cells. A naive "retry once on malformed tool_call" loop would have recovered most of these.
 7. **"Harness complexity dominates within a tier" is a conditional claim.** It's only true where the base model's first-shot success rate is *below target* AND *multi-turn-recoverable*. On `glm-4.7-flash`, the HTML tasks failed condition 2 (model drifts on multi-turn); the code tasks failed condition 1 (model hit 100% first-shot). Complex harnesses paid returns in neither experiment.
 
 ---
 
 ## Honest scope
 
-- **Two pilots, not two benchmarks.** 5 tasks × 3 seeds per experiment. Wilson CIs overlap for most pairs; only `react`'s worst-of-five ranking on HTML is statistically reliable.
+- **Two pilots, not two benchmarks.** 5 tasks × 3 seeds per experiment. Wilson CIs overlap for most pairs on HTML; on code-gen every harness hit 15/15 so CIs are uniform [0.80, 1.00].
+- **Run-to-run variance is real on this model.** Two independent N=15 HTML runs produced middle-of-the-pack rankings that differ by up to 0.33. The *approximate tiers* (single_shot near top, reflexion near bottom) are stable; exact ordering within tiers isn't. The numbers in this article are from the most recent run; rerunning would produce different specifics with a similar shape.
 - **One model.** `glm-4.7-flash` is an open-source 19 GB checkpoint on CPU-heavy local inference. Results on Claude Sonnet, GPT-4o, or Gemini 2.0 could reshuffle every ordering.
 - **No held-out fixtures.** All HTML pages and code tasks were visible during harness development. See [`HELD_OUT.md`](../HELD_OUT.md) for the explicit decision.
-- **Seven tag-moves in the commit log.** Every move documented in [`HARNESSES_FROZEN.md`](../HARNESSES_FROZEN.md) with a reason. No move happened after a matrix had been run against the newer tag — peek-and-patch is structurally prevented by the `check_freeze_gate()` pre-flight.
+- **Eight tag-moves in the commit log.** Every move documented in [`HARNESSES_FROZEN.md`](../HARNESSES_FROZEN.md) with a reason. No move happened after a matrix had been run against the newer tag — peek-and-patch is structurally prevented by the `check_freeze_gate()` pre-flight.
 
 ---
 

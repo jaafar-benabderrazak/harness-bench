@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from harness_eng.analysis import produce_all  # noqa: E402
 from harness_eng.cost_estimator import estimate_matrix, format_estimate  # noqa: E402
-from harness_eng.harnesses import HARNESSES  # noqa: E402
+from harness_eng.harnesses import HARNESSES_BY_TASK_TYPE  # noqa: E402
 from harness_eng.runner import run_matrix  # noqa: E402
 from harness_eng.tasks.loader import load_tasks  # noqa: E402
 from harness_eng.trace_viewer import build_viewer  # noqa: E402
@@ -20,7 +20,9 @@ def main() -> int:
     p.add_argument("--seeds", type=int, default=3,
                    help="Seeds per cell (default 3; Wilson CIs are brittle below 3)")
     p.add_argument("--yes", action="store_true", help="Skip cost-confirmation prompt.")
-    p.add_argument("--harnesses", nargs="+", default=list(HARNESSES.keys()))
+    p.add_argument("--harnesses", nargs="+",
+                   default=HARNESSES_BY_TASK_TYPE["html_extract"],
+                   help="Default: the 5 HTML-family harnesses. Use --harnesses a b c to override.")
     args = p.parse_args()
 
     tasks = load_tasks()
