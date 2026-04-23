@@ -151,6 +151,7 @@ class Harness(ABC):
             "model_response",
             input_tokens=mc.input_tokens,
             output_tokens=mc.output_tokens,
+            usage=mc.usage_raw,
             latency_s=mc.latency_s,
             stop_reason=mc.stop_reason,
             content=mc.content,

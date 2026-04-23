@@ -6,12 +6,15 @@ Every tool call, every model call, every grader verdict goes to a file keyed by
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from .config import TRACES_DIR
+
+SCHEMA_VERSION = 1
 
 
 @dataclass
@@ -25,16 +28,18 @@ class Tracer:
     def __post_init__(self) -> None:
         self.path = TRACES_DIR / self.harness / self.task_id / f"{self.run_id}.jsonl"
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._fh = self.path.open("a", encoding="utf-8")
+        self._fh = self.path.open("a", buffering=1, encoding="utf-8")
 
     def log(self, event_type: str, **payload: Any) -> None:
         record = {
+            "schema_version": SCHEMA_VERSION,
             "ts": time.time(),
             "type": event_type,
             **payload,
         }
         self._fh.write(json.dumps(record, default=str) + "\n")
         self._fh.flush()
+        os.fsync(self._fh.fileno())
 
     def close(self) -> None:
         if self._fh is not None:

@@ -7,6 +7,7 @@ for the chart.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 
 
@@ -17,11 +18,15 @@ class GraderResult:
     success: bool  # all fields correct
 
 
-_WS = re.compile(r"\s+")
+_ASCII_WS = re.compile(r"[ \t\n\r\f\v]+")
 
 
 def _norm(s: str) -> str:
-    return _WS.sub(" ", s.strip().lower())
+    s = unicodedata.normalize("NFC", s)
+    s = s.strip()
+    s = s.casefold()
+    s = _ASCII_WS.sub(" ", s)
+    return s
 
 
 def grade(predicted: dict[str, str] | None, expected: dict[str, str]) -> GraderResult:

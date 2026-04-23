@@ -20,7 +20,7 @@ def _get_client() -> Any:
         # Deferred import so the module is importable (e.g. for tests) without
         # the SDK installed. Only the runtime path calls this.
         from anthropic import Anthropic
-        _client = Anthropic()
+        _client = Anthropic(max_retries=0)
     return _client
 
 
@@ -31,6 +31,7 @@ class ModelCall:
     latency_s: float
     stop_reason: str
     content: list[dict[str, Any]]
+    usage_raw: dict[str, Any]
 
 
 def call(
@@ -54,10 +55,16 @@ def call(
     resp = client.messages.create(**kwargs)
     latency = time.perf_counter() - t0
 
+    try:
+        usage_raw = resp.usage.model_dump()
+    except AttributeError:
+        usage_raw = dict(resp.usage.__dict__)
+
     return ModelCall(
         input_tokens=resp.usage.input_tokens,
         output_tokens=resp.usage.output_tokens,
         latency_s=latency,
         stop_reason=resp.stop_reason or "",
         content=[b.model_dump() for b in resp.content],
+        usage_raw=usage_raw,
     )
