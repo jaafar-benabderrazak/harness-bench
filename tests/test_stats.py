@@ -72,3 +72,39 @@ def test_aggregate_zero_successes_cost_per_success_nan():
     agg = aggregate(df)
     h = agg.df_harness.iloc[0]
     assert math.isnan(h["cost_per_success_usd"])
+
+
+def test_aggregate_seed_variance_flagged_when_unstable():
+    """Within-cell seed variance: high std exposes unstable harnesses, 0 = deterministic."""
+    rows = [
+        {"harness": "react", "task_id": "t1", "seed": 0, "success": True,
+         "field_accuracy": 1.0, "input_tokens": 100, "output_tokens": 50,
+         "tool_calls": 1, "wall_clock_s": 0.5, "cost_usd": 0.001, "per_field": {}},
+        {"harness": "react", "task_id": "t1", "seed": 1, "success": False,
+         "field_accuracy": 0.0, "input_tokens": 100, "output_tokens": 50,
+         "tool_calls": 1, "wall_clock_s": 0.5, "cost_usd": 0.001, "per_field": {}},
+        {"harness": "minimal", "task_id": "t1", "seed": 0, "success": True,
+         "field_accuracy": 1.0, "input_tokens": 50, "output_tokens": 25,
+         "tool_calls": 0, "wall_clock_s": 0.3, "cost_usd": 0.0, "per_field": {}},
+        {"harness": "minimal", "task_id": "t1", "seed": 1, "success": True,
+         "field_accuracy": 1.0, "input_tokens": 50, "output_tokens": 25,
+         "tool_calls": 0, "wall_clock_s": 0.3, "cost_usd": 0.0, "per_field": {}},
+    ]
+    df = pd.DataFrame(rows)
+    agg = aggregate(df)
+    assert "seed_success_std" in agg.df_harness.columns
+    stds = dict(zip(agg.df_harness["harness"], agg.df_harness["seed_success_std"]))
+    assert stds["minimal"] == 0.0
+    assert stds["react"] > 0.0
+
+
+def test_aggregate_single_seed_variance_is_zero():
+    """Single-seed run — no within-cell variance signal exists; column is 0."""
+    rows = [
+        {"harness": "react", "task_id": "t1", "seed": 0, "success": True,
+         "field_accuracy": 1.0, "input_tokens": 100, "output_tokens": 50,
+         "tool_calls": 1, "wall_clock_s": 0.5, "cost_usd": 0.001, "per_field": {}},
+    ]
+    df = pd.DataFrame(rows)
+    agg = aggregate(df)
+    assert (agg.df_harness["seed_success_std"] == 0.0).all()

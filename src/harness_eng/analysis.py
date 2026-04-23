@@ -77,6 +77,16 @@ def aggregate(df: pd.DataFrame) -> Aggregates:
         (c / s) if s > 0 else float("nan")
         for c, s in zip(per_harness["cost_usd"], per_harness["successes"])
     ]
+    # Within-cell seed variance: for each (harness, task) group, how much
+    # does success flip across seeds? High std = unstable, low std = deterministic.
+    if "seed" in df.columns and df["seed"].nunique() > 1:
+        per_cell = df.groupby(["harness", "task_id"])["success"].agg(["mean", "std"])
+        per_harness_seed_std = (
+            per_cell["std"].groupby("harness").mean().fillna(0.0).rename("seed_success_std")
+        )
+        per_harness = per_harness.merge(per_harness_seed_std, on="harness", how="left")
+    else:
+        per_harness["seed_success_std"] = 0.0
     return Aggregates(df_rows=df, df_harness=per_harness)
 
 
