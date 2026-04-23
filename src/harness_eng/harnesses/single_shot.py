@@ -19,15 +19,24 @@ class SingleShotHarness(Harness):
     TOOL_WHITELIST = frozenset({"submit_answer"})
 
     def _execute(self, task: Task, ctx: ToolContext, tracer: Tracer, usage: _Usage) -> tuple[dict[str, str] | None, str]:
-        html = ctx.html()
-        user = (
-            self._task_prompt(task)
-            + "\n\nHere is the full HTML of the page:\n\n"
-            + "```html\n"
-            + html
-            + "\n```\n"
-            + "Call submit_answer now. Do not call any other tools."
-        )
+        if task.type == "code_gen":
+            user = (
+                self._task_prompt(task)
+                + "\n\nFunction signature:\n```python\n"
+                + task.signature
+                + "\n```\n"
+                + "Call submit_answer with the full Python source (including the signature and body) in the `code` argument. Do not call any other tools."
+            )
+        else:
+            html = ctx.html()
+            user = (
+                self._task_prompt(task)
+                + "\n\nHere is the full HTML of the page:\n\n"
+                + "```html\n"
+                + html
+                + "\n```\n"
+                + "Call submit_answer now. Do not call any other tools."
+            )
         tools = build_tool_list(["submit_answer"])
         mc = self._step_model(BASE_ROLE, [{"role": "user", "content": user}], tools, tracer, usage)
         for block in self._tool_uses(mc.content):
