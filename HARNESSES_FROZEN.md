@@ -18,7 +18,7 @@ The entire experiment depends on one invariant: the five harnesses, their shared
 
 | Path | Blob SHA |
 |------|----------|
-| `src/harness_eng/harnesses/base.py` | `1d32af5831414d71d922924d035e6290a854f62e` |
+| `src/harness_eng/harnesses/base.py` | `625ac6abb31c0b62e7af9dcf33c92279a9707c4f` |
 | `src/harness_eng/harnesses/single_shot.py` | `0b2aa16e412122ebca0ca7ac1ab66e5c41527ce5` |
 | `src/harness_eng/harnesses/react.py` | `2923e22ed7cf0da8e4620ed346f4eaaf0fae67f9` |
 | `src/harness_eng/harnesses/plan_execute.py` | `8740421ed48d0673f1e792a6a104508cba816097` |
@@ -31,7 +31,8 @@ The entire experiment depends on one invariant: the five harnesses, their shared
 
 | Date | From SHA | To SHA | Reason | Invalidated matrix runs |
 |------|----------|--------|--------|------------------------|
-| 2026-04-23 | `0a44719` | (this commit) | Phase 4 added `TOOL_WHITELIST` attrs to every harness class + enforcement in `_step_model`. No matrix had been executed against the prior tag, so the move is a mechanical re-anchor — nothing is invalidated. | None |
+| 2026-04-23 | `0a44719` | `4eacafb` | Phase 4 added `TOOL_WHITELIST` attrs to every harness class + enforcement in `_step_model`. No matrix had been executed against the prior tag, so the move is a mechanical re-anchor — nothing is invalidated. | None |
+| 2026-04-23 | `4eacafb` | (this commit) | CI-fix cleanup: removed unused `field` import from `harnesses/base.py`. No runtime behavior change, but blob SHA changes, so the tag re-anchors. Still no matrix runs invalidated. | None |
 
 ## What can still change post-freeze
 
