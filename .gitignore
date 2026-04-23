@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+
+# experiment artifacts
+traces/
+results/*.png
+results/runs/
+!results/.gitkeep
