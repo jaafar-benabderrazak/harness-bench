@@ -11,19 +11,16 @@ import random
 import sys
 from pathlib import Path
 
-from bs4 import BeautifulSoup
-
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from harness_eng import model as model_module
-from harness_eng.analysis import produce_all
-from harness_eng.config import FIXTURES_DIR
-from harness_eng.harnesses import HARNESSES
-from harness_eng.model import ModelCall
-from harness_eng.runner import run_matrix
-from harness_eng.tasks.loader import load_tasks
-from harness_eng.trace_viewer import build_viewer
+from harness_eng import model as model_module  # noqa: E402
+from harness_eng.analysis import produce_all  # noqa: E402
+from harness_eng.harnesses import HARNESSES  # noqa: E402
+from harness_eng.model import ModelCall  # noqa: E402
+from harness_eng.runner import run_matrix  # noqa: E402
+from harness_eng.tasks.loader import load_tasks  # noqa: E402
+from harness_eng.trace_viewer import build_viewer  # noqa: E402
 
 
 # Per-harness "skill" and "cost" shape, picked to produce a legible frontier.
@@ -140,7 +137,6 @@ def _patch_harness_runs():
     """Wrap Harness.run to install per-cell fake state before each run."""
     import harness_eng.harnesses.base as base_mod
     original_run = base_mod.Harness.run
-    original_call = model_module.call
     model_module.call = _fake_call
     base_mod.model_call = _fake_call  # harnesses/base.py imported `call as model_call`
 
