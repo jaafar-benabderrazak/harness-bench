@@ -170,6 +170,188 @@ def field_heatmap(agg: Aggregates, out: Path) -> None:
     plt.close(fig)
 
 
+HARNESS_COLORS: dict[str, str] = {
+    "single_shot":  "#2563eb",  # blue
+    "react":        "#dc2626",  # red
+    "plan_execute": "#9333ea",  # purple
+    "reflexion":    "#ea580c",  # orange
+    "minimal":      "#059669",  # green
+}
+
+
+def stop_reason_chart(agg: Aggregates, out: Path) -> None:
+    """Stacked-bar chart: stop_reason composition per harness."""
+    rows = agg.df_rows
+    pivot = (
+        rows.groupby(["harness", "stop_reason"]).size().unstack(fill_value=0)
+    )
+    pivot = pivot.reindex(index=agg.df_harness["harness"].tolist())
+    # Column order: submitted first (good), everything else after (bad)
+    cols = ["submitted"] + [c for c in pivot.columns if c != "submitted"]
+    pivot = pivot[[c for c in cols if c in pivot.columns]]
+    stop_colors = {
+        "submitted":  "#059669",
+        "turn_cap":   "#ea580c",
+        "no_submit":  "#9333ea",
+        "error":      "#dc2626",
+    }
+    fig, ax = plt.subplots(figsize=(7, 3.5))
+    left = [0] * len(pivot)
+    for col in pivot.columns:
+        vals = pivot[col].values
+        ax.barh(pivot.index, vals, left=left, label=col, color=stop_colors.get(col, "#6b7280"))
+        for i, v in enumerate(vals):
+            if v > 0:
+                ax.text(left[i] + v / 2, i, str(v), ha="center", va="center",
+                        fontsize=9, color="white", fontweight="bold")
+        left = [x + v for x, v in zip(left, vals)]
+    ax.set_xlabel("Cells (out of N)")
+    ax.set_title("Stop-reason distribution per harness")
+    ax.legend(loc="lower right", framealpha=0.95)
+    ax.grid(axis="x", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out, dpi=140)
+    plt.close(fig)
+
+
+def wall_clock_heatmap(agg: Aggregates, out: Path) -> None:
+    """Per-task × per-harness wall-clock — shows where each harness spent its time."""
+    rows = agg.df_rows.copy()
+    pivot = (
+        rows.pivot_table(
+            index="harness",
+            columns="task_id",
+            values="wall_clock_s",
+            aggfunc="mean",
+        )
+        .reindex(index=agg.df_harness["harness"].tolist())
+    )
+    fig, ax = plt.subplots(figsize=(max(6, 0.9 * len(pivot.columns)), 3.5))
+    im = ax.imshow(pivot.values, cmap="YlOrRd", aspect="auto")
+    ax.set_xticks(range(len(pivot.columns)))
+    ax.set_xticklabels(pivot.columns, rotation=45, ha="right")
+    ax.set_yticks(range(len(pivot.index)))
+    ax.set_yticklabels(pivot.index)
+    for i in range(pivot.shape[0]):
+        for j in range(pivot.shape[1]):
+            v = pivot.values[i, j]
+            if pd.isna(v):
+                continue
+            color = "white" if v > pivot.values.max() * 0.55 else "black"
+            ax.text(j, i, f"{v:.0f}s", ha="center", va="center", fontsize=8, color=color)
+    ax.set_title("Mean wall-clock per cell (seconds) — where each harness spent time")
+    fig.colorbar(im, ax=ax, fraction=0.02, pad=0.02, label="seconds")
+    fig.tight_layout()
+    fig.savefig(out, dpi=140)
+    plt.close(fig)
+
+
+def token_efficiency_chart(agg: Aggregates, out: Path) -> None:
+    """Scatter: total input_tokens vs success_rate, with Wilson CI as vertical error bars."""
+    df = agg.df_harness.copy()
+    fig, ax = plt.subplots(figsize=(7, 5))
+    yerr_low = (df["success_rate"] - df["ci_low"]).clip(lower=0)
+    yerr_high = (df["ci_high"] - df["success_rate"]).clip(lower=0)
+    for i, (_, row) in enumerate(df.iterrows()):
+        color = HARNESS_COLORS.get(row["harness"], "#374151")
+        ax.errorbar(
+            row["input_tokens"], row["success_rate"],
+            yerr=[[yerr_low.iloc[i]], [yerr_high.iloc[i]]],
+            fmt="o", capsize=4, markersize=10, elinewidth=1, color=color,
+        )
+        ax.annotate(
+            row["harness"],
+            (row["input_tokens"], row["success_rate"]),
+            xytext=(10, 0), textcoords="offset points",
+            color=color, fontweight="bold",
+        )
+    ax.set_xscale("log")
+    ax.set_xlabel("Total input tokens across matrix (log scale)")
+    ax.set_ylabel("Task success rate (Wilson 95% CI)")
+    ax.set_title(f"Token efficiency — {CONFIG.model.name}")
+    ax.grid(alpha=0.3, which="both")
+    ax.set_ylim(-0.05, 1.05)
+    fig.tight_layout()
+    fig.savefig(out, dpi=140)
+    plt.close(fig)
+
+
+@dataclass
+class DeepTraceAnalysis:
+    """Quantitative per-harness trace dissection beyond TraceSummary."""
+    selector_retry_patterns: dict[str, dict[str, int]]  # harness -> {selector: count}
+    no_match_rate: dict[str, float]                      # harness -> fraction of css_select calls returning NO_MATCH
+    median_turns_on_failure: dict[str, float]            # harness -> median turn count on cells that didn't submit
+    total_tool_calls: dict[str, int]                     # harness -> total tool invocations
+
+
+def analyze_traces_deep(traces_dir: Path | None = None) -> DeepTraceAnalysis:
+    """Walk traces/ and extract per-harness behavioural stats not in TraceSummary."""
+    traces_dir = traces_dir or TRACES_DIR
+    selector_counts: dict[str, Counter] = defaultdict(Counter)
+    css_total: dict[str, int] = defaultdict(int)
+    css_no_match: dict[str, int] = defaultdict(int)
+    fail_turn_counts: dict[str, list[int]] = defaultdict(list)
+    tool_calls_total: dict[str, int] = defaultdict(int)
+
+    if not traces_dir.exists():
+        return DeepTraceAnalysis({}, {}, {}, {})
+
+    for harness_dir in sorted(p for p in traces_dir.iterdir() if p.is_dir()):
+        harness = harness_dir.name
+        for task_dir in sorted(p for p in harness_dir.iterdir() if p.is_dir()):
+            for trace_file in sorted(task_dir.glob("*.jsonl")):
+                events = []
+                for line in trace_file.read_text(encoding="utf-8").splitlines():
+                    if line.strip():
+                        try:
+                            events.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            continue
+                end = next((e for e in reversed(events) if e.get("type") == "run_end"), {})
+                turns = sum(1 for e in events if e.get("type") == "model_response")
+
+                submitted = end.get("stop_reason") == "submitted"
+                if not submitted:
+                    fail_turn_counts[harness].append(turns)
+
+                pending_selector: str | None = None
+                for ev in events:
+                    t = ev.get("type")
+                    if t == "tool_call":
+                        tool_calls_total[harness] += 1
+                        if ev.get("name") == "css_select":
+                            sel = (ev.get("args") or {}).get("selector", "")
+                            if sel:
+                                selector_counts[harness][sel] += 1
+                                css_total[harness] += 1
+                                pending_selector = sel
+                    elif t == "tool_result" and pending_selector is not None:
+                        if ev.get("output_len", 0) == 8:  # "NO_MATCH" is 8 chars
+                            css_no_match[harness] += 1
+                        pending_selector = None
+
+    no_match_rate = {
+        h: (css_no_match[h] / css_total[h]) if css_total[h] else 0.0
+        for h in css_total
+    }
+    median_turns = {}
+    for h, lst in fail_turn_counts.items():
+        if lst:
+            sl = sorted(lst)
+            m = sl[len(sl) // 2]
+            median_turns[h] = float(m)
+    top_selectors = {
+        h: dict(c.most_common(5)) for h, c in selector_counts.items()
+    }
+    return DeepTraceAnalysis(
+        selector_retry_patterns=top_selectors,
+        no_match_rate=no_match_rate,
+        median_turns_on_failure=median_turns,
+        total_tool_calls=dict(tool_calls_total),
+    )
+
+
 def freeze_sha() -> str:
     """Resolve the `harnesses-frozen` tag to its commit SHA. 'unknown' if not in a git repo."""
     try:
@@ -430,6 +612,15 @@ def produce_all(run_path: Path, out_dir: Path | None = None) -> dict[str, Path]:
     heatmap_path = out_dir / "field_heatmap.png"
     field_heatmap(agg, heatmap_path)
 
+    stop_path = out_dir / "stop_reasons.png"
+    stop_reason_chart(agg, stop_path)
+
+    wallclock_path = out_dir / "wall_clock_heatmap.png"
+    wall_clock_heatmap(agg, wallclock_path)
+
+    tokeff_path = out_dir / "token_efficiency.png"
+    token_efficiency_chart(agg, tokeff_path)
+
     article_path = out_dir / "article.md"
     write_article(
         agg,
@@ -442,5 +633,8 @@ def produce_all(run_path: Path, out_dir: Path | None = None) -> dict[str, Path]:
         "table": table_path,
         "chart": chart_path,
         "heatmap": heatmap_path,
+        "stop_reasons": stop_path,
+        "wall_clock_heatmap": wallclock_path,
+        "token_efficiency": tokeff_path,
         "article": article_path,
     }
