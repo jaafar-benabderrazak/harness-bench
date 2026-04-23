@@ -1,14 +1,26 @@
-"""Regression: Anthropic client constructed with max_retries=0 and ModelCall.usage_raw populated."""
+"""Regression: Anthropic client constructed with max_retries=0 and ModelCall.usage_raw populated.
+
+These tests exercise the Anthropic backend path specifically, so they pin
+HARNESS_BACKEND=anthropic via a CONFIG swap even if the default is now ollama.
+"""
 from __future__ import annotations
 
 import sys
 import types
+from dataclasses import replace
 
 from harness_eng import model as model_module
 
 
+def _force_anthropic_backend(monkeypatch):
+    new_model = replace(model_module.CONFIG.model, backend="anthropic", name="claude-sonnet-4-6")
+    new_cfg = replace(model_module.CONFIG, model=new_model)
+    monkeypatch.setattr(model_module, "CONFIG", new_cfg)
+
+
 def test_client_constructed_with_max_retries_zero(monkeypatch):
     """When _get_client instantiates the client, it passes max_retries=0."""
+    _force_anthropic_backend(monkeypatch)
     captured: dict = {}
 
     class FakeAnthropic:
@@ -25,6 +37,7 @@ def test_client_constructed_with_max_retries_zero(monkeypatch):
 
 def test_usage_raw_populated(monkeypatch):
     """ModelCall.usage_raw contains every field returned by resp.usage.model_dump()."""
+    _force_anthropic_backend(monkeypatch)
     class FakeUsage:
         input_tokens = 100
         output_tokens = 50

@@ -5,11 +5,17 @@ matter more than the absolute dollar figures. Update if pricing changes.
 """
 from __future__ import annotations
 
-# USD per 1M tokens. Update as Anthropic publishes new prices.
+# USD per 1M tokens. Ollama-hosted models cost $0 (electricity only).
 PRICING: dict[str, tuple[float, float]] = {
-    "claude-sonnet-4-6": (3.0, 15.0),   # (input, output) per 1M
+    "claude-sonnet-4-6": (3.0, 15.0),
     "claude-opus-4-7":    (15.0, 75.0),
     "claude-haiku-4-5":   (1.0, 5.0),
+    "mistral:7b":         (0.0, 0.0),
+    "llama3.1:70b":       (0.0, 0.0),
+    "mixtral:8x7b":       (0.0, 0.0),
+    "phi3:mini":          (0.0, 0.0),
+    "gemma2:27b":         (0.0, 0.0),
+    "glm-4.7-flash:latest": (0.0, 0.0),
 }
 
 

@@ -25,6 +25,7 @@ class ModelConfig:
     name: str
     max_tokens: int
     temperature: float
+    backend: str  # "anthropic" or "ollama"
 
 
 @dataclass(frozen=True)
@@ -38,11 +39,17 @@ class ExperimentConfig:
 
 
 def load_config() -> ExperimentConfig:
+    backend = os.getenv("HARNESS_BACKEND", "ollama").lower()
+    default_model = {
+        "anthropic": "claude-sonnet-4-6",
+        "ollama": "mistral:7b",
+    }.get(backend, "mistral:7b")
     return ExperimentConfig(
         model=ModelConfig(
-            name=os.getenv("HARNESS_MODEL", "claude-sonnet-4-6"),
+            name=os.getenv("HARNESS_MODEL", default_model),
             max_tokens=int(os.getenv("HARNESS_MAX_TOKENS", "2048")),
             temperature=float(os.getenv("HARNESS_TEMPERATURE", "0.0")),
+            backend=backend,
         ),
     )
 
