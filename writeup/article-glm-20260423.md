@@ -160,6 +160,14 @@ The elaborate harnesses all share one vulnerability: they need the model to do t
 
 Every orange/red square above is a cell that took a long time because the harness was running in circles. `plan_execute` on `paper_01` alone burned **254 seconds** — over four minutes on one page.
 
+And here's the same grid but scored by correctness — which harness got which page right:
+
+![per-task × per-harness field accuracy](field_heatmap-glm-20260423.png)
+
+- **`recipe_01` is easy** — everyone except `react` nails it.
+- **`product_01` destroys the multi-turn harnesses** — `react` and `minimal` both get 0. The page uses `<div class="brand-line">Brand: <a>Lumina</a></div>`, which no simple selector catches.
+- **`paper_01` defeats `reflexion`** — 0 out of 3 seeds. The critique-and-retry loop locked onto a wrong selector and kept retrying it.
+
 <details>
 <summary><b>Why plan_execute specifically collapsed (the damning number)</b></summary>
 
