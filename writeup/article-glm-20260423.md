@@ -1,3 +1,8 @@
+---
+layout: default
+title: "Same model, five harnesses, one benchmark (glm-4.7-flash, 2026-04-23)"
+---
+
 # Same model, five harnesses, one benchmark
 
 *Published 2026-04-23. Run generated against freeze commit `05554d3` (`git rev-parse harnesses-frozen`), backend: Ollama `glm-4.7-flash:latest` on local inference. 5 harnesses × 5 tasks × 3 seeds = 75 cells.*

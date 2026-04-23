@@ -1,3 +1,8 @@
+---
+layout: default
+title: Held-Out Fixtures — Decision
+---
+
 # Held-Out Fixtures — Decision
 
 ## Decision

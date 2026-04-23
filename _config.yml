@@ -1,0 +1,43 @@
+title: harness_eng
+description: Same model, five harnesses, one benchmark. A controlled experiment in harness engineering.
+theme: jekyll-theme-cayman
+
+# jekyll-relative-links rewrites [text](foo.md) to the correct rendered URL on
+# GitHub Pages while leaving the source markdown readable on GitHub itself.
+plugins:
+  - jekyll-relative-links
+relative_links:
+  enabled: true
+  collections: false
+
+# Which files Jekyll builds into the site. Everything else is skipped.
+include:
+  - README.md
+  - writeup
+  - HELD_OUT.md
+  - HARNESSES_FROZEN.md
+
+# Never publish these — they have no render value.
+exclude:
+  - src
+  - tests
+  - scripts
+  - results
+  - traces
+  - .planning
+  - .claude
+  - pyproject.toml
+  - .env
+  - .env.example
+  - .gitattributes
+  - .gitignore
+  - .github
+
+# Absolute links in markdown resolve against this when deployed to user.github.io/harness_eng
+baseurl: /harness_eng
+
+# Kramdown defaults match GFM closely — needed for tables and fenced code blocks to render.
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false

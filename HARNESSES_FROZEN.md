@@ -1,3 +1,8 @@
+---
+layout: default
+title: Harness Freeze Manifest
+---
+
 # Harness Freeze Manifest
 
 **Freeze date:** 2026-04-23
