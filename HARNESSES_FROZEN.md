@@ -25,14 +25,15 @@ The entire experiment depends on one invariant: the five harnesses, their shared
 | `src/harness_eng/harnesses/reflexion.py` | `57586a286a8628ef28234703ba856fe8845f467a` |
 | `src/harness_eng/harnesses/minimal.py` | `6ccb0f9e604bb9bd604b2ba1d1cbb7a4ba1716c7` |
 | `src/harness_eng/tools.py` | `fddabd878b3314965074b231b5e75ed0dfd278c1` |
-| `src/harness_eng/model.py` | `4d263754cecf50da47756ab2d19b58ee0da471f6` |
+| `src/harness_eng/model.py` | `7315affee23e2bf9d94f2484fb3c8783756f9637` |
 
 ## Tag moves
 
 | Date | From SHA | To SHA | Reason | Invalidated matrix runs |
 |------|----------|--------|--------|------------------------|
 | 2026-04-23 | `0a44719` | `4eacafb` | Phase 4 added `TOOL_WHITELIST` attrs to every harness class + enforcement in `_step_model`. No matrix had been executed against the prior tag, so the move is a mechanical re-anchor — nothing is invalidated. | None |
-| 2026-04-23 | `4eacafb` | (this commit) | CI-fix cleanup: removed unused `field` import from `harnesses/base.py`. No runtime behavior change, but blob SHA changes, so the tag re-anchors. Still no matrix runs invalidated. | None |
+| 2026-04-23 | `4eacafb` | `d0fc1f1` | CI-fix cleanup: removed unused `field` import from `harnesses/base.py`. No runtime behavior change, but blob SHA changes, so the tag re-anchors. Still no matrix runs invalidated. | None |
+| 2026-04-23 | `d0fc1f1` | (this commit) | Backend pivot: added Ollama support in `model.py` so the experiment can run on a free local model (mistral:7b by default). Gated file changed; tag re-anchors onto the new code path. Still no matrix runs invalidated. | None |
 
 ## What can still change post-freeze
 
