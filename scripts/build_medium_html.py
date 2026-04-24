@@ -7,20 +7,27 @@ script produces an HTML rendering that works when pasted into Medium by:
 
 - Stripping the Jekyll front-matter block.
 - Stripping the <script> blocks (Mermaid bootstrap).
-- Replacing each ```mermaid fenced block with an italicized caption
-  describing the diagram (the article's surrounding prose already
-  conveys the content; the diagram was illustrative).
+- Rendering each ```mermaid fenced block to a PNG via mermaid-cli (`mmdc`)
+  under writeup/diagrams/ and replacing the fence with an <img> reference.
 - Flattening <details>/<summary> into a heading + exposed content.
+
+Requires:
+    pip install markdown pymdown-extensions
+    npm install -g @mermaid-js/mermaid-cli   (provides `mmdc`)
 
 Usage:
     python scripts/build_medium_html.py
 
-Writes: writeup/article-medium.html
+Writes: writeup/article-medium.html + writeup/diagrams/diagram-NN.png
 """
 
 from __future__ import annotations
 
+import hashlib
 import re
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 
 import markdown
@@ -28,6 +35,7 @@ import markdown
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "writeup" / "article.md"
 OUT = ROOT / "writeup" / "article-medium.html"
+DIAGRAMS_DIR = ROOT / "writeup" / "diagrams"
 
 
 def strip_frontmatter(text: str) -> str:
@@ -42,15 +50,100 @@ def strip_script_blocks(text: str) -> str:
     return re.sub(r"<script\b[^>]*>.*?</script>", "", text, flags=re.DOTALL | re.IGNORECASE)
 
 
+def _mmdc_available() -> bool:
+    return shutil.which("mmdc") is not None
+
+
+def _label_for(body: str) -> str:
+    subgraph_label = re.search(r'subgraph\s+\w+\s*\[\s*"([^"]+)"\s*\]', body)
+    if subgraph_label:
+        return subgraph_label.group(1).strip()
+    first_line = body.strip().splitlines()[0] if body.strip() else ""
+    stripped = re.sub(r"^(flowchart|graph)\s+(LR|TD|TB|RL|BT)\s*", "", first_line).strip()
+    return stripped or "control-flow diagram"
+
+
+def _render_mermaid(body: str, out_path: Path) -> bool:
+    """Render a Mermaid source string to PNG via mmdc. Returns True on success."""
+    mmdc = shutil.which("mmdc") or "mmdc"  # full path avoids Windows .cmd shim issues
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".mmd", encoding="utf-8", delete=False
+    ) as handle:
+        handle.write(body)
+        src_path = Path(handle.name)
+    try:
+        result = subprocess.run(
+            [
+                mmdc,
+                "--input", str(src_path),
+                "--output", str(out_path),
+                "--backgroundColor", "white",
+                "--scale", "2",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            shell=False,
+        )
+        if result.returncode != 0:
+            print(f"  [mmdc] failed for {out_path.name}: {result.stderr.strip()[:200]}")
+            return False
+        return out_path.exists()
+    except FileNotFoundError:
+        # Windows .cmd shims sometimes evade CreateProcess — retry via shell.
+        result = subprocess.run(
+            f'mmdc --input "{src_path}" --output "{out_path}" --backgroundColor white --scale 2',
+            capture_output=True,
+            text=True,
+            timeout=60,
+            shell=True,
+        )
+        if result.returncode != 0:
+            print(f"  [mmdc shell] failed for {out_path.name}: {result.stderr.strip()[:200]}")
+            return False
+        return out_path.exists()
+    finally:
+        src_path.unlink(missing_ok=True)
+
+
+def _preceding_heading(text: str, start: int) -> str | None:
+    """Find the nearest Markdown heading that appears before `start` in `text`."""
+    prefix = text[:start]
+    matches = list(re.finditer(r"^#{1,6}\s+(.+?)\s*$", prefix, flags=re.MULTILINE))
+    if not matches:
+        return None
+    return matches[-1].group(1).strip()
+
+
 def replace_mermaid_blocks(text: str) -> str:
+    DIAGRAMS_DIR.mkdir(parents=True, exist_ok=True)
+    has_mmdc = _mmdc_available()
+    if not has_mmdc:
+        print("  [warn] `mmdc` not found on PATH — falling back to caption stubs")
+
+    counter = {"n": 0}
+
     def replace(match: re.Match[str]) -> str:
         body = match.group(1)
-        subgraph_label = re.search(r'subgraph\s+\w+\s*\[\s*"([^"]+)"\s*\]', body)
-        if subgraph_label:
-            label = subgraph_label.group(1).strip()
-        else:
-            first_line = body.strip().splitlines()[0] if body.strip() else ""
-            label = re.sub(r"^(flowchart|graph)\s+(LR|TD|TB|RL|BT)\s*", "", first_line).strip() or "control-flow diagram"
+        label = _label_for(body)
+        if label == "control-flow diagram":
+            heading = _preceding_heading(text, match.start())
+            if heading:
+                label = heading
+
+        counter["n"] += 1
+        # Stable filename: index + short content hash keeps the file reproducible across runs.
+        digest = hashlib.sha1(body.encode("utf-8")).hexdigest()[:8]
+        filename = f"diagram-{counter['n']:02d}-{digest}.png"
+        out_path = DIAGRAMS_DIR / filename
+
+        if has_mmdc and (not out_path.exists() or out_path.stat().st_size == 0):
+            if not _render_mermaid(body.strip() + "\n", out_path):
+                return f"\n*[Diagram omitted for Medium — {label}.]*\n"
+
+        if has_mmdc and out_path.exists():
+            rel = f"diagrams/{filename}"
+            return f"\n![{label}]({rel})\n"
         return f"\n*[Diagram omitted for Medium — {label}.]*\n"
 
     pattern = re.compile(r"```mermaid\s*\n(.*?)```", re.DOTALL)

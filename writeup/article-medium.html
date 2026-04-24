@@ -36,7 +36,7 @@
 <p><em>A two-part controlled experiment on agent harness design. One frozen model. Two task types. 150 runs. Source + data: <a href="https://github.com/jaafar-benabderrazak/harness-bench">github.com/jaafar-benabderrazak/harness-bench</a>. Freeze commit: <code>9977e85</code>.</em></p>
 <hr />
 <h2 id="what-this-is-in-one-diagram">What this is, in one diagram</h2>
-<p><em>[Diagram omitted for Medium — control-flow diagram.]</em></p>
+<p><img alt="What this is, in one diagram" src="diagrams/diagram-01-c86f1934.png" /></p>
 <p>Same model. Two task types. Eight harnesses across both (five per task type, some shared). <strong>150 graded runs, zero dollars</strong> (open-source model, local inference).</p>
 <hr />
 <h2 id="the-finding-in-one-sentence">The finding, in one sentence</h2>
@@ -64,14 +64,14 @@
 <p><strong>Strengths:</strong> fastest wall-clock, fewest tokens, one branch point (no compounding probability of drift). 100% schema compliance on both task types in this experiment.</p>
 <p><strong>Weaknesses:</strong> the prompt must fit the full context, the model must internalize it in one read, and there is no recovery from a bad first answer. Degrades gracefully to random guessing if the context doesn&rsquo;t fit or the task genuinely needs exploration.</p>
 <p><strong>Use when:</strong> your first-shot accuracy is already close to target, or when you haven&rsquo;t measured it yet.</p>
-<p><em>[Diagram omitted for Medium — single_shot · dump HTML, ask once.]</em></p>
+<p><img alt="single_shot · dump HTML, ask once" src="diagrams/diagram-02-e5f72e40.png" /></p>
 <h4 id="react-think-act-observe-repeat"><code>react</code> — think, act, observe, repeat</h4>
 <p>The canonical ReAct loop. The model thinks in free text, calls a tool (<code>css_select</code> to run a selector, <code>read_html</code> to re-read the page), observes the result, and loops until it has enough to call <code>submit_answer</code>. Hard turn cap at 12.</p>
 <p><strong>In production:</strong> LangChain&rsquo;s <code>AgentExecutor</code> / <code>create_react_agent</code>. OpenAI Assistants API with tools enabled. The default entrypoint in most agent frameworks and tutorials.</p>
 <p><strong>Strengths:</strong> flexible — the model decides what to look at. No plan to get wrong. Works well on strong models with reliable multi-turn tool use.</p>
 <p><strong>Weaknesses:</strong> fragile on weak models — every turn is another opportunity for a malformed tool call or a drift. In this experiment, <code>react</code> hit an <code>mismatched arg_key</code> SDK-boundary error on 8 of 15 HTML cells, terminating those runs early. Its CSS selectors returned <code>NO_MATCH</code> 61.7% of the time — the model was guessing at page structure it couldn&rsquo;t see without reading.</p>
 <p><strong>Use when:</strong> multi-turn tool-use reliability on your model is ≥90% per turn.</p>
-<p><em>[Diagram omitted for Medium — react · think, act, observe, repeat.]</em></p>
+<p><img alt="react · think, act, observe, repeat" src="diagrams/diagram-03-4e4853a2.png" /></p>
 <h4 id="plan_execute-plan-blind-then-execute"><code>plan_execute</code> — plan blind, then execute</h4>
 <p>Two-stage. A <em>planner</em> call emits a checklist of CSS selectors <strong>without seeing the HTML</strong>. An <em>executor</em> then runs through the checklist, firing each selector as a tool call; once done, it submits.</p>
 <p><strong>In production:</strong> LangGraph plan-and-execute nodes. OpenAI Agents SDK planner patterns. CrewAI hierarchical agents where a manager delegates to workers. Task-decomposition frameworks in general.</p>
@@ -79,21 +79,21 @@
 <p><strong>Weaknesses:</strong> catastrophic when the planner is wrong. The planner in this experiment wrote selectors before seeing the HTML, so the plan was frequently invented. One earlier N=15 run saw the executor fire a non-existent selector <strong>417 times</strong> — the harness had no backchannel for the executor to signal &ldquo;this plan is garbage.&rdquo; <code>plan_execute</code> hit the 12-turn cap on 60% of cells. 87.6% of its CSS-select calls returned nothing in that run.</p>
 <p><strong>Fix (not implemented here):</strong> give the executor a <code>revise_plan</code> tool. Better fix: let the planner read the HTML first.</p>
 <p><strong>Use when:</strong> the plan can be grounded in context the planner can see. Not when the plan has to be made blind.</p>
-<p><em>[Diagram omitted for Medium — plan_execute · plan blind, then execute.]</em></p>
+<p><img alt="plan_execute · plan blind, then execute" src="diagrams/diagram-04-ea112a42.png" /></p>
 <h4 id="reflexion-react-critique-retry"><code>reflexion</code> — react, critique, retry</h4>
 <p>Run the ReAct loop. If the grader fails, the model critiques its own trace in text and retries once with the critique in context.</p>
 <p><strong>In production:</strong> Reflexion-paper implementations. CrewAI critic agents. Any &ldquo;self-reflection&rdquo; or &ldquo;LLM-as-judge-on-itself&rdquo; pattern. Agentic loops with post-hoc error analysis.</p>
 <p><strong>Strengths:</strong> in principle, can catch genuine reasoning errors — &ldquo;I picked the wrong selector because I misread the DOM.&rdquo;</p>
 <p><strong>Weaknesses:</strong> the critique only helps when the failure is <em>reasoning</em>, not <em>mechanics</em>. In this experiment, <code>reflexion</code> hit SDK-boundary formatting errors on 5/15 cells — the critique analyzed them as if they were reasoning errors and the retry hit the same formatting wall. Scored 3/15 in the most recent HTML run despite spending 977 seconds. The critique loop didn&rsquo;t rescue failures; it re-paid for them.</p>
 <p><strong>Use when:</strong> you can reliably distinguish reasoning errors from mechanical errors in the trace before invoking critique. (This is hard.)</p>
-<p><em>[Diagram omitted for Medium — reflexion · react, critique, retry.]</em></p>
+<p><img alt="reflexion · react, critique, retry" src="diagrams/diagram-05-dfa79868.png" /></p>
 <h4 id="minimal-react-minus-read_html"><code>minimal</code> — react minus <code>read_html</code></h4>
 <p>Identical control flow to <code>react</code>, but the <code>read_html</code> tool is removed — only <code>css_select</code> remains. Forces selector-only exploration of a page the model cannot read.</p>
 <p><strong>In production:</strong> a deliberately minimal tool set; common in cost-conscious agent designs where broad read tools are considered &ldquo;too expensive&rdquo; in tokens. The &ldquo;let&rsquo;s not dump the whole page&rdquo; instinct.</p>
 <p><strong>Strengths:</strong> cheaper per turn (no massive HTML dumps in context). Forces the model to commit to specific selectors.</p>
 <p><strong>Weaknesses:</strong> the model is selector-guessing on a page it can&rsquo;t see. <strong>79.7%</strong> of <code>minimal</code>&rsquo;s CSS-select calls returned <code>NO_MATCH</code> across the 75-cell matrix. The scored result swung from 4/15 to 9/15 between two independent N=15 runs on the same frozen model — extreme run-to-run variance. Trades tokens for time, not for accuracy.</p>
 <p><strong>Use when:</strong> almost never, on weak models. Possibly viable on models that reliably infer page structure from minimal context.</p>
-<p><em>[Diagram omitted for Medium — minimal · react minus read_html.]</em></p>
+<p><img alt="minimal · react minus read_html" src="diagrams/diagram-06-09b0567f.png" /></p>
 <h3 id="code-gen-family-5-harnesses-single_shot-and-react-run-in-both-families">Code-gen family (5 harnesses — <code>single_shot</code> and <code>react</code> run in both families)</h3>
 <h4 id="chain_of_thought-reason-in-text-then-submit"><code>chain_of_thought</code> — reason in text, then submit</h4>
 <p>Prompt explicitly asks the model to reason step-by-step (&ldquo;First I&rsquo;ll consider the edge cases, then I&rsquo;ll write the function, then I&rsquo;ll verify…&rdquo;) before emitting the code via <code>submit_answer</code>.</p>
@@ -101,21 +101,21 @@
 <p><strong>Strengths:</strong> can unlock accuracy on problems that genuinely need multi-step reasoning (constraint satisfaction, multi-hop math, complex code transformations). Cheap to add.</p>
 <p><strong>Weaknesses:</strong> <strong>not free.</strong> Reasoning tokens the model has to produce before reaching the code. In this experiment, <code>chain_of_thought</code> took <strong>2× the wall-clock</strong> of <code>single_shot</code> for the same 15/15 score on textbook algorithm problems. The model already knew <code>fizzbuzz</code> by heart — the extra reasoning was ceremony.</p>
 <p><strong>Use when:</strong> the task genuinely requires reasoning that the first-shot call wouldn&rsquo;t produce. Measure first; don&rsquo;t assume.</p>
-<p><em>[Diagram omitted for Medium — chain_of_thought · reason, then submit.]</em></p>
+<p><img alt="chain_of_thought · reason, then submit" src="diagrams/diagram-07-9f4d204b.png" /></p>
 <h4 id="test_driven-loop-with-run_tests"><code>test_driven</code> — loop with <code>run_tests</code></h4>
 <p>The model writes a candidate, runs it through a <code>check_syntax</code> tool and then <code>run_tests</code> (executes pytest in a subprocess against the task&rsquo;s test suite), reads the pytest output, revises, and loops until tests pass or turn cap.</p>
 <p><strong>In production:</strong> Aider&rsquo;s agent mode. Cursor&rsquo;s agent / composer mode. Devin-style loops. Any coding agent that has direct access to a test runner and iterates until green.</p>
 <p><strong>Strengths:</strong> on tasks where the first attempt has a realistic failure probability, this is the pattern that pays. Tests give the model structured, actionable feedback (&ldquo;<code>test_empty_input</code> failed at line 12 with AssertionError&rdquo;). The plumbing is impressive when it fires correctly.</p>
 <p><strong>Weaknesses:</strong> <strong>hideously expensive when the first attempt already works.</strong> Every <code>run_tests</code> call feeds the <em>full</em> pytest output (up to ~1,500 characters) back into context as a tool_result. In this experiment, <code>test_driven</code> used <strong>35,469 input tokens</strong> vs <code>single_shot</code>&rsquo;s <strong>6,438</strong> — 5.8× the tokens for identical 15/15 accuracy. 30 pytest subprocess runs across 15 cells, most of them confirming code the model already wrote correctly.</p>
 <p><strong>Use when:</strong> your measured first-shot accuracy on the task is below ~80%, and the failures come with structured test output the model can parse.</p>
-<p><em>[Diagram omitted for Medium — test_driven · loop with run_tests.]</em></p>
+<p><img alt="test_driven · loop with run_tests" src="diagrams/diagram-08-beb966cc.png" /></p>
 <h4 id="retry_on_fail-submit-see-test-output-retry"><code>retry_on_fail</code> — submit, see test output, retry</h4>
 <p>Submit the code. Run the tests. If they fail, show the pytest output to the model and let it retry, up to 3 attempts total. No iteration <em>before</em> submission — this is closer to how a human developer pushes to CI, reads the red build, and fixes.</p>
 <p><strong>In production:</strong> CI-style retry wrappers. Most production error-handling around LLM calls. &ldquo;Try, catch, prompt-with-context, try again&rdquo; patterns. Simpler than <code>test_driven</code> because the model doesn&rsquo;t call the test runner directly.</p>
 <p><strong>Strengths:</strong> cleaner separation — the harness owns the test runner, the model owns the code. No &ldquo;iterate forever before committing&rdquo; temptation. On tasks where first-attempt failure is common but recoverable, it provides a safety net at modest token cost.</p>
 <p><strong>Weaknesses:</strong> pays the retry tax only when retries happen. In this experiment, no first attempts failed, so <code>retry_on_fail</code> was 15% slower than <code>single_shot</code> but produced the same result. The insurance was never needed.</p>
 <p><strong>Use when:</strong> you want a safety net without the per-turn tool overhead of <code>test_driven</code>, and you trust the model to not over-iterate.</p>
-<p><em>[Diagram omitted for Medium — retry_on_fail · submit, see test output, retry.]</em></p>
+<p><img alt="retry_on_fail · submit, see test output, retry" src="diagrams/diagram-09-e9788031.png" /></p>
 <hr />
 <h2 id="part-1-html-extraction-hard-tasks">Part 1 — HTML extraction (hard tasks)</h2>
 <p><strong>Task</strong>: extract 3–5 fields from 5 messy HTML pages (product, job post, event, recipe, paper metadata). Deterministic grader: per-field normalized exact match.</p>
@@ -441,7 +441,7 @@ reflexion         2x  article.event-details, div.event-details, ...
 <hr />
 <h2 id="the-combined-lesson">The combined lesson</h2>
 <p>Two experiments, two failure shapes, one conclusion:</p>
-<p><em>[Diagram omitted for Medium — control-flow diagram.]</em></p>
+<p><img alt="The combined lesson" src="diagrams/diagram-10-00f0ae10.png" /></p>
 <p>On hard tasks, the failure is &ldquo;extra turns introduce new failure modes faster than they add accuracy.&rdquo; On easy tasks, the failure is &ldquo;extra turns waste time and tokens for accuracy the model already had.&rdquo; The two shapes converge on the same engineering advice.</p>
 <hr />
 <h2 id="when-complex-harnesses-do-pay-the-honest-limit">When complex harnesses DO pay (the honest limit)</h2>
