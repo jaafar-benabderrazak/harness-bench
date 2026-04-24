@@ -126,7 +126,7 @@ Confidence: HIGH (manual loop is documented, widely used, and what the existing 
 
 - **OpenTelemetry GenAI Semantic Conventions** (experimental, 2026) — defines `gen_ai.*` attribute names (`gen_ai.request.model`, `gen_ai.usage.input_tokens`, `gen_ai.operation.name = "chat" | "invoke_agent"`). Protobuf over the wire, not JSONL.
 - **Langfuse / LangSmith / OpenLLMetry** — each has its own schema; none interoperate.
-- **Claude Code's own session transcript** — JSONL, one record per message. Informal.
+- **Various CLI agent transcripts** — JSONL, one record per message. Informal, tool-specific.
 
 **Recommendation:** define a small, documented JSON schema. Borrow attribute *names* from OTel GenAI where they exist; do not take the OTel SDK dependency.
 
