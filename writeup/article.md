@@ -74,9 +74,23 @@ Running two separate experiments — one where the tasks are genuinely hard for 
 
 ## The eight harnesses
 
-All eight inherit from the same `Harness` base class. What varies is the control flow. Each has a `TOOL_WHITELIST` enforced by the runner so you cannot add a tool by accident.
+All eight inherit from the same `Harness` base class. What varies is the control flow. Each has a `TOOL_WHITELIST` enforced by the runner so you cannot add a tool by accident. Every harness terminates by calling the same `submit_answer` tool — parsing free-form text for a JSON answer is a huge confound on weaker models, so the tool channel acts as a schema-enforcing chokepoint. `single_shot` hit **100% schema compliance** on both task types.
+
+Each description below includes the real-world analog — the LangChain / LangGraph / CrewAI / framework pattern this harness matches — so you can map the finding to code you're already running.
 
 ### HTML-extraction family (5 harnesses)
+
+#### `single_shot` — dump the HTML, ask once
+
+One model call. The full HTML page goes into the prompt; the model replies by calling `submit_answer(fields={...})`. No tools, no loops, no retries.
+
+**In production:** a direct API call. No framework. `anthropic.messages.create(...)` or `openai.chat.completions.create(...)` with a structured-output tool. The "zero-framework" baseline most teams skip.
+
+**Strengths:** fastest wall-clock, fewest tokens, one branch point (no compounding probability of drift). 100% schema compliance on both task types in this experiment.
+
+**Weaknesses:** the prompt must fit the full context, the model must internalize it in one read, and there is no recovery from a bad first answer. Degrades gracefully to random guessing if the context doesn't fit or the task genuinely needs exploration.
+
+**Use when:** your first-shot accuracy is already close to target, or when you haven't measured it yet.
 
 ```mermaid
 flowchart LR
@@ -86,6 +100,18 @@ flowchart LR
     end
 ```
 
+#### `react` — think, act, observe, repeat
+
+The canonical ReAct loop. The model thinks in free text, calls a tool (`css_select` to run a selector, `read_html` to re-read the page), observes the result, and loops until it has enough to call `submit_answer`. Hard turn cap at 12.
+
+**In production:** LangChain's `AgentExecutor` / `create_react_agent`. OpenAI Assistants API with tools enabled. The default entrypoint in most agent frameworks and tutorials.
+
+**Strengths:** flexible — the model decides what to look at. No plan to get wrong. Works well on strong models with reliable multi-turn tool use.
+
+**Weaknesses:** fragile on weak models — every turn is another opportunity for a malformed tool call or a drift. In this experiment, `react` hit an `mismatched arg_key` SDK-boundary error on 8 of 15 HTML cells, terminating those runs early. Its CSS selectors returned `NO_MATCH` 61.7% of the time — the model was guessing at page structure it couldn't see without reading.
+
+**Use when:** multi-turn tool-use reliability on your model is ≥90% per turn.
+
 ```mermaid
 flowchart LR
     subgraph react["react · think, act, observe, repeat"]
@@ -94,6 +120,20 @@ flowchart LR
         R2 -->|once ready| R4["submit_answer(fields)"]
     end
 ```
+
+#### `plan_execute` — plan blind, then execute
+
+Two-stage. A *planner* call emits a checklist of CSS selectors **without seeing the HTML**. An *executor* then runs through the checklist, firing each selector as a tool call; once done, it submits.
+
+**In production:** LangGraph plan-and-execute nodes. OpenAI Agents SDK planner patterns. CrewAI hierarchical agents where a manager delegates to workers. Task-decomposition frameworks in general.
+
+**Strengths:** conceptually appealing when the plan is cheap to make and the execution is expensive to redo. Separates "what to try" from "how to try it."
+
+**Weaknesses:** catastrophic when the planner is wrong. The planner in this experiment wrote selectors before seeing the HTML, so the plan was frequently invented. One earlier N=15 run saw the executor fire a non-existent selector **417 times** — the harness had no backchannel for the executor to signal "this plan is garbage." `plan_execute` hit the 12-turn cap on 60% of cells. 87.6% of its CSS-select calls returned nothing in that run.
+
+**Fix (not implemented here):** give the executor a `revise_plan` tool. Better fix: let the planner read the HTML first.
+
+**Use when:** the plan can be grounded in context the planner can see. Not when the plan has to be made blind.
 
 ```mermaid
 flowchart TD
@@ -107,6 +147,18 @@ flowchart TD
     end
 ```
 
+#### `reflexion` — react, critique, retry
+
+Run the ReAct loop. If the grader fails, the model critiques its own trace in text and retries once with the critique in context.
+
+**In production:** Reflexion-paper implementations. CrewAI critic agents. Any "self-reflection" or "LLM-as-judge-on-itself" pattern. Agentic loops with post-hoc error analysis.
+
+**Strengths:** in principle, can catch genuine reasoning errors — "I picked the wrong selector because I misread the DOM."
+
+**Weaknesses:** the critique only helps when the failure is *reasoning*, not *mechanics*. In this experiment, `reflexion` hit SDK-boundary formatting errors on 5/15 cells — the critique analyzed them as if they were reasoning errors and the retry hit the same formatting wall. Scored 3/15 in the most recent HTML run despite spending 977 seconds. The critique loop didn't rescue failures; it re-paid for them.
+
+**Use when:** you can reliably distinguish reasoning errors from mechanical errors in the trace before invoking critique. (This is hard.)
+
 ```mermaid
 flowchart LR
     subgraph reflexion["reflexion · react, critique, retry"]
@@ -117,6 +169,18 @@ flowchart LR
     end
 ```
 
+#### `minimal` — react minus `read_html`
+
+Identical control flow to `react`, but the `read_html` tool is removed — only `css_select` remains. Forces selector-only exploration of a page the model cannot read.
+
+**In production:** a deliberately minimal tool set; common in cost-conscious agent designs where broad read tools are considered "too expensive" in tokens. The "let's not dump the whole page" instinct.
+
+**Strengths:** cheaper per turn (no massive HTML dumps in context). Forces the model to commit to specific selectors.
+
+**Weaknesses:** the model is selector-guessing on a page it can't see. **79.7%** of `minimal`'s CSS-select calls returned `NO_MATCH` across the 75-cell matrix. The scored result swung from 4/15 to 9/15 between two independent N=15 runs on the same frozen model — extreme run-to-run variance. Trades tokens for time, not for accuracy.
+
+**Use when:** almost never, on weak models. Possibly viable on models that reliably infer page structure from minimal context.
+
 ```mermaid
 flowchart LR
     subgraph minimal["minimal · react minus read_html"]
@@ -126,7 +190,19 @@ flowchart LR
     end
 ```
 
-### Code-gen family (5 harnesses — single_shot + react shared with above)
+### Code-gen family (5 harnesses — `single_shot` and `react` run in both families)
+
+#### `chain_of_thought` — reason in text, then submit
+
+Prompt explicitly asks the model to reason step-by-step ("First I'll consider the edge cases, then I'll write the function, then I'll verify…") before emitting the code via `submit_answer`.
+
+**In production:** any "think step by step" system prompt. Most prompt-engineering guides recommend this as a default. The Anthropic / OpenAI suggested pattern for tasks involving any reasoning.
+
+**Strengths:** can unlock accuracy on problems that genuinely need multi-step reasoning (constraint satisfaction, multi-hop math, complex code transformations). Cheap to add.
+
+**Weaknesses:** **not free.** Reasoning tokens the model has to produce before reaching the code. In this experiment, `chain_of_thought` took **2× the wall-clock** of `single_shot` for the same 15/15 score on textbook algorithm problems. The model already knew `fizzbuzz` by heart — the extra reasoning was ceremony.
+
+**Use when:** the task genuinely requires reasoning that the first-shot call wouldn't produce. Measure first; don't assume.
 
 ```mermaid
 flowchart LR
@@ -135,6 +211,18 @@ flowchart LR
         C1[user + task] --> C2[model reasons:<br/>'step 1...'] --> C3["submit_answer(code)"]
     end
 ```
+
+#### `test_driven` — loop with `run_tests`
+
+The model writes a candidate, runs it through a `check_syntax` tool and then `run_tests` (executes pytest in a subprocess against the task's test suite), reads the pytest output, revises, and loops until tests pass or turn cap.
+
+**In production:** Aider's agent mode. Cursor's agent / composer mode. Devin-style loops. Any coding agent that has direct access to a test runner and iterates until green.
+
+**Strengths:** on tasks where the first attempt has a realistic failure probability, this is the pattern that pays. Tests give the model structured, actionable feedback ("`test_empty_input` failed at line 12 with AssertionError"). The plumbing is impressive when it fires correctly.
+
+**Weaknesses:** **hideously expensive when the first attempt already works.** Every `run_tests` call feeds the *full* pytest output (up to ~1,500 characters) back into context as a tool_result. In this experiment, `test_driven` used **35,469 input tokens** vs `single_shot`'s **6,438** — 5.8× the tokens for identical 15/15 accuracy. 30 pytest subprocess runs across 15 cells, most of them confirming code the model already wrote correctly.
+
+**Use when:** your measured first-shot accuracy on the task is below ~80%, and the failures come with structured test output the model can parse.
 
 ```mermaid
 flowchart LR
@@ -147,6 +235,18 @@ flowchart LR
     end
 ```
 
+#### `retry_on_fail` — submit, see test output, retry
+
+Submit the code. Run the tests. If they fail, show the pytest output to the model and let it retry, up to 3 attempts total. No iteration *before* submission — this is closer to how a human developer pushes to CI, reads the red build, and fixes.
+
+**In production:** CI-style retry wrappers. Most production error-handling around LLM calls. "Try, catch, prompt-with-context, try again" patterns. Simpler than `test_driven` because the model doesn't call the test runner directly.
+
+**Strengths:** cleaner separation — the harness owns the test runner, the model owns the code. No "iterate forever before committing" temptation. On tasks where first-attempt failure is common but recoverable, it provides a safety net at modest token cost.
+
+**Weaknesses:** pays the retry tax only when retries happen. In this experiment, no first attempts failed, so `retry_on_fail` was 15% slower than `single_shot` but produced the same result. The insurance was never needed.
+
+**Use when:** you want a safety net without the per-turn tool overhead of `test_driven`, and you trust the model to not over-iterate.
+
 ```mermaid
 flowchart LR
     subgraph rof["retry_on_fail · submit, see test output, retry"]
@@ -156,8 +256,6 @@ flowchart LR
         R3 -->|no| R5[show pytest<br/>output] --> R6[attempt 2/3] --> R3
     end
 ```
-
-Every harness terminates by calling the same `submit_answer` tool. That's on purpose — parsing free-form text for a JSON answer is a huge confound on weaker models, so the tool channel is a schema-enforcing chokepoint. `single_shot` hit **100% schema compliance** on both task types.
 
 ---
 
@@ -283,6 +381,19 @@ For models that need stable rankings in articles or dashboards, N=15 × one run 
 
 Every orange/red square is a cell where the harness was running in circles. `plan_execute` burned its turn budget on nearly every task; `minimal` earned its better score this run by also trying more selectors, at a cost of 1,059 seconds total wall-clock.
 
+### What this costs if you're paying by the token
+
+These numbers ran on a free local model (zero API dollars). If the same matrix ran against a frontier model at list prices (~$2.50/M input, ~$10/M output):
+
+| harness       | approx cost / extraction | at 10,000 tasks/day   |
+|---------------|-------------------------:|-----------------------|
+| single_shot   | ~$0.0045                 | ~$16,000 / year       |
+| minimal       | ~$0.030                  | ~$109,000 / year      |
+| reflexion     | ~$0.036                  | ~$131,000 / year      |
+| plan_execute  | **~$0.045**              | **~$164,000 / year**  |
+
+`plan_execute` costs roughly 10× per task for a *lower* success rate. At any meaningful volume, that's six-figure ceremony paid for an agent that gets the answer less often than the baseline. Real cost-sensitive production teams measure this before picking a framework; most don't.
+
 ---
 
 ## Part 2 — Code generation (easy tasks)
@@ -363,7 +474,31 @@ On hard tasks, the failure is "extra turns introduce new failure modes faster th
 
 ---
 
-## Seven takeaways
+## When complex harnesses DO pay (the honest limit)
+
+Not all complexity is waste. Three conditions under which `test_driven`, `reflexion`, or `plan_execute` legitimately earn their tokens:
+
+1. **First-shot accuracy is genuinely below target.** If `single_shot` hits 95%, no retry loop helps. If it hits 40%, every extra turn is a real chance to climb.
+2. **Failures are structurally recoverable.** The model needs a signal it can act on — a concrete test failure, a visible schema mismatch, a tool error with a clear cause. A 12-turn loop that feeds the model `NO_MATCH` over and over is not recovery; it's paying to fail more elaborately.
+3. **Multi-turn tool-use reliability exceeds ~90% per turn.** Below that, each extra turn multiplies the odds of SDK-boundary errors. On weak models, complexity accelerates failure instead of correcting it.
+
+On a stronger model (Claude Sonnet 4.6, GPT-4o, Gemini 2.5), all three conditions plausibly hold. `test_driven`-style loops probably do pay there. On the local `glm-4.7-flash` used here, none of the three held, so none of the complex harnesses did.
+
+Know which regime you're in before picking a harness.
+
+---
+
+## The three takeaways that actually matter
+
+**1. Always benchmark `single_shot` first.** Fifteen lines of code. If it hits your target, ship it. The fancy framework is a cost you can only justify against a measured gap.
+
+**2. `seeds=1` lies. On weak models, `seeds=3` lies about middle rankings.** Two independent N=15 runs of this matrix moved middle-of-the-pack rankings by up to 0.33. If ordering matters in your eval, run the matrix multiple times; don't just add more seeds within one run.
+
+**3. Harness complexity pays returns only when first-shot is below target AND failures are multi-turn-recoverable.** Both conditions rarely hold at once on weak models. Check your regime before adding a retry loop.
+
+---
+
+## Seven takeaways (the full list, for engineers)
 
 1. **Always run `single_shot` as your baseline.** If it hits your accuracy target, ship it. You will not find a faster, cheaper, more reliable harness.
 2. **Before investing in multi-turn harnesses, check your model's single-shot schema compliance.** Our `glm-4.7-flash` hit 100% compliance on `single_shot` but its multi-turn tool loops drift. If schema compliance is below ~90%, multi-turn harnesses will underperform on that model.
@@ -372,6 +507,14 @@ On hard tasks, the failure is "extra turns introduce new failure modes faster th
 5. **`plan_execute` needs a feedback loop from executor to plan.** The executor gets `NO_MATCH` back on ~70% of CSS selector calls because the planner writes selectors before seeing the HTML. Minimum viable fix: a `revise_plan` tool. Correct fix: let the planner see the HTML.
 6. **Tool-call error handling belongs in the harness, not the SDK.** `ResponseError: mismatched arg_key` propagated as hard termination on multiple `react` and `reflexion` cells. A naive "retry once on malformed tool_call" loop would have recovered most of these.
 7. **"Harness complexity dominates within a tier" is a conditional claim.** It's only true where the base model's first-shot success rate is *below target* AND *multi-turn-recoverable*. On `glm-4.7-flash`, the HTML tasks failed condition 2 (model drifts on multi-turn); the code tasks failed condition 1 (model hit 100% first-shot). Complex harnesses paid returns in neither experiment.
+
+---
+
+## Your Monday action
+
+Before your next sprint, add one 15-line `single_shot` baseline to your eval harness. Make it the first row in your results table. If your production agent — whatever framework it's built on — doesn't beat the baseline by more than 10%, rip out the production agent.
+
+Most of the ceremony around modern agents is paid for a problem the model already solved in one call.
 
 ---
 

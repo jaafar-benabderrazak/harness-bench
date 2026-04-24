@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Same model, eight harnesses, two benchmarks</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    max-width: 720px;
+    margin: 40px auto;
+    padding: 0 20px;
+    line-height: 1.6;
+    color: #242424;
+    background: #fff;
+  }
+  h1, h2, h3, h4 { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #111; }
+  h1 { font-size: 2em; line-height: 1.2; margin-top: 0; }
+  h2 { font-size: 1.5em; margin-top: 2em; }
+  h3 { font-size: 1.2em; margin-top: 1.6em; }
+  h4 { font-size: 1.05em; margin-top: 1.4em; }
+  img { max-width: 100%; height: auto; display: block; margin: 1.5em auto; }
+  code { background: #f3f3f3; padding: 2px 5px; border-radius: 3px; font-size: 0.95em; }
+  pre { background: #f7f7f7; padding: 14px; overflow-x: auto; border-radius: 4px; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; margin: 1.5em 0; width: 100%; font-size: 0.95em; }
+  th, td { border: 1px solid #d0d0d0; padding: 8px 12px; text-align: left; }
+  th { background: #f7f7f7; }
+  blockquote { border-left: 3px solid #aaa; margin: 1.5em 0; padding-left: 1em; color: #555; }
+  em { color: #6a6a6a; }
+  hr { border: none; border-top: 1px solid #d0d0d0; margin: 2em 0; }
+</style>
+</head>
+<body>
+<h1 id="same-model-eight-harnesses-two-benchmarks">Same model, eight harnesses, two benchmarks</h1>
+<p><em>A two-part controlled experiment on agent harness design. One frozen model. Two task types. 150 runs. Source + data: <a href="https://github.com/jaafar-benabderrazak/harness-bench">github.com/jaafar-benabderrazak/harness-bench</a>. Freeze commit: <code>9977e85</code>.</em></p>
+<hr />
+<h2 id="what-this-is-in-one-diagram">What this is, in one diagram</h2>
+<p><em>[Diagram omitted for Medium — control-flow diagram.]</em></p>
+<p>Same model. Two task types. Eight harnesses across both (five per task type, some shared). <strong>150 graded runs, zero dollars</strong> (open-source model, local inference).</p>
+<hr />
+<h2 id="the-finding-in-one-sentence">The finding, in one sentence</h2>
+<p><strong>On hard tasks, complex harnesses failed more than simple ones. On easy tasks, complex harnesses cost more than simple ones. <code>single_shot</code> won on wall-clock in both experiments.</strong></p>
+<p>On HTML extraction (hard for this model):</p>
+<p><img alt="HTML frontier" src="frontier-glm-20260423.png" /></p>
+<p><code>single_shot</code> and <code>minimal</code> tied for best at 9/15 success. <code>single_shot</code> did it in <strong>228 seconds</strong>; <code>plan_execute</code> scored 6/15 and took <strong>1,615 seconds</strong> — 7× the wall-clock for a <em>worse</em> result. <code>reflexion</code> came last at 3/15 despite spending 977 seconds of wall-clock.</p>
+<p>On code generation (easy for this model):</p>
+<p><img alt="code-gen resource bars — who's wasteful when everyone scores 100%" src="resource_bars-code-glm-20260423.png" /></p>
+<p>Every harness hit 15/15 on code-gen. <code>chain_of_thought</code> took twice single_shot&rsquo;s wall-clock for the same result. <code>test_driven</code> used 6× the input tokens.</p>
+<p>Harness complexity costs something. In both experiments, on this model, it didn&rsquo;t buy anything back.</p>
+<hr />
+<h2 id="why-this-experiment-exists">Why this experiment exists</h2>
+<p>A popular belief in agent-engineering discourse: the <strong>model</strong> is the main thing; the <strong>harness</strong> (the control loop around the model) is a minor detail — pick your model, glue on a standard ReAct loop, done.</p>
+<p>This project flips the variable. Freeze the model. Vary only the harness. Measure what moves.</p>
+<p>Running two separate experiments — one where the tasks are genuinely hard for the base model, one where they&rsquo;re easy — tests the hypothesis from both ends. If harness complexity is universally valuable, both experiments should show it paying. If it&rsquo;s a crutch for weak models, the hard experiment should show it paying more. If it&rsquo;s mostly dead weight on this model, <em>neither</em> experiment should show it paying — which is what the data says.</p>
+<hr />
+<h2 id="the-eight-harnesses">The eight harnesses</h2>
+<p>All eight inherit from the same <code>Harness</code> base class. What varies is the control flow. Each has a <code>TOOL_WHITELIST</code> enforced by the runner so you cannot add a tool by accident. Every harness terminates by calling the same <code>submit_answer</code> tool — parsing free-form text for a JSON answer is a huge confound on weaker models, so the tool channel acts as a schema-enforcing chokepoint. <code>single_shot</code> hit <strong>100% schema compliance</strong> on both task types.</p>
+<p>Each description below includes the real-world analog — the LangChain / LangGraph / CrewAI / framework pattern this harness matches — so you can map the finding to code you&rsquo;re already running.</p>
+<h3 id="html-extraction-family-5-harnesses">HTML-extraction family (5 harnesses)</h3>
+<h4 id="single_shot-dump-the-html-ask-once"><code>single_shot</code> — dump the HTML, ask once</h4>
+<p>One model call. The full HTML page goes into the prompt; the model replies by calling <code>submit_answer(fields={...})</code>. No tools, no loops, no retries.</p>
+<p><strong>In production:</strong> a direct API call. No framework. <code>anthropic.messages.create(...)</code> or <code>openai.chat.completions.create(...)</code> with a structured-output tool. The &ldquo;zero-framework&rdquo; baseline most teams skip.</p>
+<p><strong>Strengths:</strong> fastest wall-clock, fewest tokens, one branch point (no compounding probability of drift). 100% schema compliance on both task types in this experiment.</p>
+<p><strong>Weaknesses:</strong> the prompt must fit the full context, the model must internalize it in one read, and there is no recovery from a bad first answer. Degrades gracefully to random guessing if the context doesn&rsquo;t fit or the task genuinely needs exploration.</p>
+<p><strong>Use when:</strong> your first-shot accuracy is already close to target, or when you haven&rsquo;t measured it yet.</p>
+<p><em>[Diagram omitted for Medium — single_shot · dump HTML, ask once.]</em></p>
+<h4 id="react-think-act-observe-repeat"><code>react</code> — think, act, observe, repeat</h4>
+<p>The canonical ReAct loop. The model thinks in free text, calls a tool (<code>css_select</code> to run a selector, <code>read_html</code> to re-read the page), observes the result, and loops until it has enough to call <code>submit_answer</code>. Hard turn cap at 12.</p>
+<p><strong>In production:</strong> LangChain&rsquo;s <code>AgentExecutor</code> / <code>create_react_agent</code>. OpenAI Assistants API with tools enabled. The default entrypoint in most agent frameworks and tutorials.</p>
+<p><strong>Strengths:</strong> flexible — the model decides what to look at. No plan to get wrong. Works well on strong models with reliable multi-turn tool use.</p>
+<p><strong>Weaknesses:</strong> fragile on weak models — every turn is another opportunity for a malformed tool call or a drift. In this experiment, <code>react</code> hit an <code>mismatched arg_key</code> SDK-boundary error on 8 of 15 HTML cells, terminating those runs early. Its CSS selectors returned <code>NO_MATCH</code> 61.7% of the time — the model was guessing at page structure it couldn&rsquo;t see without reading.</p>
+<p><strong>Use when:</strong> multi-turn tool-use reliability on your model is ≥90% per turn.</p>
+<p><em>[Diagram omitted for Medium — react · think, act, observe, repeat.]</em></p>
+<h4 id="plan_execute-plan-blind-then-execute"><code>plan_execute</code> — plan blind, then execute</h4>
+<p>Two-stage. A <em>planner</em> call emits a checklist of CSS selectors <strong>without seeing the HTML</strong>. An <em>executor</em> then runs through the checklist, firing each selector as a tool call; once done, it submits.</p>
+<p><strong>In production:</strong> LangGraph plan-and-execute nodes. OpenAI Agents SDK planner patterns. CrewAI hierarchical agents where a manager delegates to workers. Task-decomposition frameworks in general.</p>
+<p><strong>Strengths:</strong> conceptually appealing when the plan is cheap to make and the execution is expensive to redo. Separates &ldquo;what to try&rdquo; from &ldquo;how to try it.&rdquo;</p>
+<p><strong>Weaknesses:</strong> catastrophic when the planner is wrong. The planner in this experiment wrote selectors before seeing the HTML, so the plan was frequently invented. One earlier N=15 run saw the executor fire a non-existent selector <strong>417 times</strong> — the harness had no backchannel for the executor to signal &ldquo;this plan is garbage.&rdquo; <code>plan_execute</code> hit the 12-turn cap on 60% of cells. 87.6% of its CSS-select calls returned nothing in that run.</p>
+<p><strong>Fix (not implemented here):</strong> give the executor a <code>revise_plan</code> tool. Better fix: let the planner read the HTML first.</p>
+<p><strong>Use when:</strong> the plan can be grounded in context the planner can see. Not when the plan has to be made blind.</p>
+<p><em>[Diagram omitted for Medium — plan_execute · plan blind, then execute.]</em></p>
+<h4 id="reflexion-react-critique-retry"><code>reflexion</code> — react, critique, retry</h4>
+<p>Run the ReAct loop. If the grader fails, the model critiques its own trace in text and retries once with the critique in context.</p>
+<p><strong>In production:</strong> Reflexion-paper implementations. CrewAI critic agents. Any &ldquo;self-reflection&rdquo; or &ldquo;LLM-as-judge-on-itself&rdquo; pattern. Agentic loops with post-hoc error analysis.</p>
+<p><strong>Strengths:</strong> in principle, can catch genuine reasoning errors — &ldquo;I picked the wrong selector because I misread the DOM.&rdquo;</p>
+<p><strong>Weaknesses:</strong> the critique only helps when the failure is <em>reasoning</em>, not <em>mechanics</em>. In this experiment, <code>reflexion</code> hit SDK-boundary formatting errors on 5/15 cells — the critique analyzed them as if they were reasoning errors and the retry hit the same formatting wall. Scored 3/15 in the most recent HTML run despite spending 977 seconds. The critique loop didn&rsquo;t rescue failures; it re-paid for them.</p>
+<p><strong>Use when:</strong> you can reliably distinguish reasoning errors from mechanical errors in the trace before invoking critique. (This is hard.)</p>
+<p><em>[Diagram omitted for Medium — reflexion · react, critique, retry.]</em></p>
+<h4 id="minimal-react-minus-read_html"><code>minimal</code> — react minus <code>read_html</code></h4>
+<p>Identical control flow to <code>react</code>, but the <code>read_html</code> tool is removed — only <code>css_select</code> remains. Forces selector-only exploration of a page the model cannot read.</p>
+<p><strong>In production:</strong> a deliberately minimal tool set; common in cost-conscious agent designs where broad read tools are considered &ldquo;too expensive&rdquo; in tokens. The &ldquo;let&rsquo;s not dump the whole page&rdquo; instinct.</p>
+<p><strong>Strengths:</strong> cheaper per turn (no massive HTML dumps in context). Forces the model to commit to specific selectors.</p>
+<p><strong>Weaknesses:</strong> the model is selector-guessing on a page it can&rsquo;t see. <strong>79.7%</strong> of <code>minimal</code>&rsquo;s CSS-select calls returned <code>NO_MATCH</code> across the 75-cell matrix. The scored result swung from 4/15 to 9/15 between two independent N=15 runs on the same frozen model — extreme run-to-run variance. Trades tokens for time, not for accuracy.</p>
+<p><strong>Use when:</strong> almost never, on weak models. Possibly viable on models that reliably infer page structure from minimal context.</p>
+<p><em>[Diagram omitted for Medium — minimal · react minus read_html.]</em></p>
+<h3 id="code-gen-family-5-harnesses-single_shot-and-react-run-in-both-families">Code-gen family (5 harnesses — <code>single_shot</code> and <code>react</code> run in both families)</h3>
+<h4 id="chain_of_thought-reason-in-text-then-submit"><code>chain_of_thought</code> — reason in text, then submit</h4>
+<p>Prompt explicitly asks the model to reason step-by-step (&ldquo;First I&rsquo;ll consider the edge cases, then I&rsquo;ll write the function, then I&rsquo;ll verify…&rdquo;) before emitting the code via <code>submit_answer</code>.</p>
+<p><strong>In production:</strong> any &ldquo;think step by step&rdquo; system prompt. Most prompt-engineering guides recommend this as a default. The Anthropic / OpenAI suggested pattern for tasks involving any reasoning.</p>
+<p><strong>Strengths:</strong> can unlock accuracy on problems that genuinely need multi-step reasoning (constraint satisfaction, multi-hop math, complex code transformations). Cheap to add.</p>
+<p><strong>Weaknesses:</strong> <strong>not free.</strong> Reasoning tokens the model has to produce before reaching the code. In this experiment, <code>chain_of_thought</code> took <strong>2× the wall-clock</strong> of <code>single_shot</code> for the same 15/15 score on textbook algorithm problems. The model already knew <code>fizzbuzz</code> by heart — the extra reasoning was ceremony.</p>
+<p><strong>Use when:</strong> the task genuinely requires reasoning that the first-shot call wouldn&rsquo;t produce. Measure first; don&rsquo;t assume.</p>
+<p><em>[Diagram omitted for Medium — chain_of_thought · reason, then submit.]</em></p>
+<h4 id="test_driven-loop-with-run_tests"><code>test_driven</code> — loop with <code>run_tests</code></h4>
+<p>The model writes a candidate, runs it through a <code>check_syntax</code> tool and then <code>run_tests</code> (executes pytest in a subprocess against the task&rsquo;s test suite), reads the pytest output, revises, and loops until tests pass or turn cap.</p>
+<p><strong>In production:</strong> Aider&rsquo;s agent mode. Cursor&rsquo;s agent / composer mode. Devin-style loops. Any coding agent that has direct access to a test runner and iterates until green.</p>
+<p><strong>Strengths:</strong> on tasks where the first attempt has a realistic failure probability, this is the pattern that pays. Tests give the model structured, actionable feedback (&ldquo;<code>test_empty_input</code> failed at line 12 with AssertionError&rdquo;). The plumbing is impressive when it fires correctly.</p>
+<p><strong>Weaknesses:</strong> <strong>hideously expensive when the first attempt already works.</strong> Every <code>run_tests</code> call feeds the <em>full</em> pytest output (up to ~1,500 characters) back into context as a tool_result. In this experiment, <code>test_driven</code> used <strong>35,469 input tokens</strong> vs <code>single_shot</code>&rsquo;s <strong>6,438</strong> — 5.8× the tokens for identical 15/15 accuracy. 30 pytest subprocess runs across 15 cells, most of them confirming code the model already wrote correctly.</p>
+<p><strong>Use when:</strong> your measured first-shot accuracy on the task is below ~80%, and the failures come with structured test output the model can parse.</p>
+<p><em>[Diagram omitted for Medium — test_driven · loop with run_tests.]</em></p>
+<h4 id="retry_on_fail-submit-see-test-output-retry"><code>retry_on_fail</code> — submit, see test output, retry</h4>
+<p>Submit the code. Run the tests. If they fail, show the pytest output to the model and let it retry, up to 3 attempts total. No iteration <em>before</em> submission — this is closer to how a human developer pushes to CI, reads the red build, and fixes.</p>
+<p><strong>In production:</strong> CI-style retry wrappers. Most production error-handling around LLM calls. &ldquo;Try, catch, prompt-with-context, try again&rdquo; patterns. Simpler than <code>test_driven</code> because the model doesn&rsquo;t call the test runner directly.</p>
+<p><strong>Strengths:</strong> cleaner separation — the harness owns the test runner, the model owns the code. No &ldquo;iterate forever before committing&rdquo; temptation. On tasks where first-attempt failure is common but recoverable, it provides a safety net at modest token cost.</p>
+<p><strong>Weaknesses:</strong> pays the retry tax only when retries happen. In this experiment, no first attempts failed, so <code>retry_on_fail</code> was 15% slower than <code>single_shot</code> but produced the same result. The insurance was never needed.</p>
+<p><strong>Use when:</strong> you want a safety net without the per-turn tool overhead of <code>test_driven</code>, and you trust the model to not over-iterate.</p>
+<p><em>[Diagram omitted for Medium — retry_on_fail · submit, see test output, retry.]</em></p>
+<hr />
+<h2 id="part-1-html-extraction-hard-tasks">Part 1 — HTML extraction (hard tasks)</h2>
+<p><strong>Task</strong>: extract 3–5 fields from 5 messy HTML pages (product, job post, event, recipe, paper metadata). Deterministic grader: per-field normalized exact match.</p>
+<p><strong>Result</strong>: <code>single_shot</code> and <code>minimal</code> tied for best at 9/15 success. <code>single_shot</code> did it in <strong>228 s</strong> total; <code>minimal</code> took <strong>1,059 s</strong> — 4.6× the wall-clock for the same result. <code>plan_execute</code> scored 6/15 despite spending <strong>1,615 seconds</strong>. <code>reflexion</code> came last at 3/15 — the critique loop didn&rsquo;t rescue failures, it kept hitting the same SDK-boundary error. Wilson CIs for the top tier (single_shot + minimal) don&rsquo;t overlap <code>reflexion</code>&rsquo;s — that ranking is statistically reliable.</p>
+<h3 id="headline-chart">Headline chart</h3>
+<p><img alt="HTML frontier" src="frontier-glm-20260423.png" /></p>
+<h3 id="per-task-accuracy">Per-task accuracy</h3>
+<p><img alt="HTML field-accuracy heatmap" src="field_heatmap-glm-20260423.png" /></p>
+<ul>
+<li><strong><code>product_01</code> destroys multi-turn harnesses</strong> — <code>react</code> and <code>minimal</code> both score 0 because the HTML uses <code>&lt;div class="brand-line"&gt;Brand: &lt;a&gt;Lumina&lt;/a&gt;&lt;/div&gt;</code>, which no generic selector catches.</li>
+<li><strong><code>paper_01</code> defeats <code>reflexion</code></strong> — 0/3 seeds. The critique loop locked onto a wrong selector and kept retrying it.</li>
+</ul>
+<h3 id="where-failures-came-from">Where failures came from</h3>
+<p><img alt="HTML stop-reason distribution" src="stop_reasons-glm-20260423.png" /></p>
+<p>Every cell ends one of four ways. <code>single_shot</code> is pure green (always cleanly submits). <code>react</code> is more than half red — hit an <code>mismatched arg_key</code> SDK-boundary error on 8/15 cells. <code>plan_execute</code> hits the 12-turn cap on 60% of cells because the planner wrote wrong selectors and the executor had no backchannel to revise them.</p>
+<h4 id="how-the-multi-turn-harnesses-burn-their-turns">How the multi-turn harnesses burn their turns</h4>
+<p>The multi-turn harnesses all share one problem: they try CSS selectors that don&rsquo;t match anything. <code>NO_MATCH</code> rates across the full 75-cell matrix:</p>
+<table>
+<thead>
+<tr>
+<th>harness</th>
+<th style="text-align: right;">CSS_select calls</th>
+<th>fraction returning NO_MATCH</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>minimal</td>
+<td style="text-align: right;">~380</td>
+<td><strong>79.7%</strong></td>
+</tr>
+<tr>
+<td>plan_execute</td>
+<td style="text-align: right;">~160</td>
+<td><strong>69.7%</strong></td>
+</tr>
+<tr>
+<td>react</td>
+<td style="text-align: right;">~50</td>
+<td>61.7%</td>
+</tr>
+<tr>
+<td>reflexion</td>
+<td style="text-align: right;">~40</td>
+<td>56.0%</td>
+</tr>
+</tbody>
+</table>
+<p>Roughly two out of three tool calls are wasted guesses. The 12-turn cap is the only thing that stops most of the loops.</p>
+<p>The single most damning number in the whole matrix: an earlier N=15 run saw <code>plan_execute</code> fire the selector <code>span.date-submitted-date</code> <strong>417 times</strong> across the full 75 cells. That selector does not exist on any of the five pages. The planner invented it. The executor fired it into the void 417 times because the harness has no backchannel — once the plan is written, the executor can only follow it. <strong>87.6%</strong> of that run&rsquo;s <code>plan_execute</code> CSS-selector attempts returned nothing. Nearly nine in ten guesses were wrong, and only the 12-turn cap stopped the loop.</p>
+<p>Top-3 most-retried selectors per harness (across the whole matrix):</p>
+<pre><code class="language-text">minimal          13x  h1
+                 12x  span.arxiv-id
+                 11x  span[id*=&quot;date&quot;]
+
+plan_execute     15x  h1
+                  6x  p
+                  6x  p:contains('When:')
+
+react             4x  h1, h2, h3
+                  3x  h1, h2, h3, .headline, .event-title, .main-title
+                  3x  .event-date, .date, .time, .when, .datetime
+
+reflexion         2x  article.event-details, div.event-details, ...
+                  2x  .event, .event-item, .event-container
+                  2x  div, section, main
+</code></pre>
+<p>The shapes tell you the failure mode: <code>minimal</code>&rsquo;s &ldquo;retry the exact same selector 13 times&rdquo; pattern is different from <code>plan_execute</code>&rsquo;s &ldquo;try the planner&rsquo;s guesses then fall back to <code>p</code>&rdquo; or <code>react</code>&rsquo;s &ldquo;OR-together a dozen maybe-selectors.&rdquo; All of them are a model that can&rsquo;t see the page structure, guessing.</p>
+<p>Median turns spent on failure (cells that didn&rsquo;t submit cleanly):</p>
+<table>
+<thead>
+<tr>
+<th>harness</th>
+<th>median turns burned</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>plan_execute</td>
+<td>13.0 — hit the cap</td>
+</tr>
+<tr>
+<td>react</td>
+<td>1.0 — mostly errored early</td>
+</tr>
+<tr>
+<td>reflexion</td>
+<td>1.0 — mostly errored early</td>
+</tr>
+</tbody>
+</table>
+<p><code>plan_execute</code> fails LATE (burns the full turn budget); <code>react</code> and <code>reflexion</code> fail EARLY (first tool call throws an SDK error). Very different cost profiles.</p>
+<h4 id="the-pilot-run-would-have-lied">The pilot run would have lied</h4>
+<p>Before the 75-cell run, a 25-cell pilot (one seed per cell instead of three) produced a completely different ranking:</p>
+<table>
+<thead>
+<tr>
+<th>harness</th>
+<th>seeds=1 (N=5)</th>
+<th>seeds=3 (N=15)</th>
+<th>Δ success</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>single_shot</td>
+<td>0.60</td>
+<td>0.60</td>
+<td>0.00</td>
+</tr>
+<tr>
+<td>plan_execute</td>
+<td>0.40</td>
+<td>0.60</td>
+<td><strong>+0.20</strong></td>
+</tr>
+<tr>
+<td>reflexion</td>
+<td>0.40</td>
+<td>0.47</td>
+<td>+0.07</td>
+</tr>
+<tr>
+<td>minimal</td>
+<td>0.60</td>
+<td><strong>0.27</strong></td>
+<td><strong>−0.33</strong></td>
+</tr>
+<tr>
+<td>react</td>
+<td>0.40</td>
+<td><strong>0.13</strong></td>
+<td><strong>−0.27</strong></td>
+</tr>
+</tbody>
+</table>
+<p><code>minimal</code> dropped from tied-for-best to second-worst. <code>plan_execute</code> jumped from bottom to tied-for-best. <strong>Three of five rankings flipped.</strong> A single-seed pilot would have published the wrong story.</p>
+<p>The summary CSV ships a <code>seed_success_std</code> column that flags the flaky ones:</p>
+<table>
+<thead>
+<tr>
+<th>harness</th>
+<th>seed std</th>
+<th>verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>plan_execute</td>
+<td>0.00</td>
+<td>Deterministic — single seed enough.</td>
+</tr>
+<tr>
+<td>single_shot</td>
+<td>0.00</td>
+<td>Deterministic — single seed enough.</td>
+</tr>
+<tr>
+<td>minimal</td>
+<td>0.12</td>
+<td>Mild variance.</td>
+</tr>
+<tr>
+<td>reflexion</td>
+<td>0.23</td>
+<td><strong>Flaky</strong> — needs more seeds.</td>
+</tr>
+<tr>
+<td>react</td>
+<td>0.23</td>
+<td><strong>Flaky</strong> — needs more seeds.</td>
+</tr>
+</tbody>
+</table>
+<p>Multi-turn tool loops branch on model stochasticity at every turn; a one-shot call has exactly one branch point. That&rsquo;s why the flippy ones are flippy.</p>
+<p><strong>A second finding got stronger when I re-ran the N=15 matrix later:</strong> even at 3 seeds per cell, <code>glm-4.7-flash</code> isn&rsquo;t fully deterministic run-to-run. Two independent N=15 runs produced these:</p>
+<table>
+<thead>
+<tr>
+<th>harness</th>
+<th style="text-align: right;">first N=15 run</th>
+<th style="text-align: right;">second N=15 run</th>
+<th>Δ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>single_shot</td>
+<td style="text-align: right;">0.60</td>
+<td style="text-align: right;">0.60</td>
+<td>0.00</td>
+</tr>
+<tr>
+<td>minimal</td>
+<td style="text-align: right;">0.27</td>
+<td style="text-align: right;"><strong>0.60</strong></td>
+<td>+0.33</td>
+</tr>
+<tr>
+<td>plan_execute</td>
+<td style="text-align: right;">0.60</td>
+<td style="text-align: right;">0.40</td>
+<td>−0.20</td>
+</tr>
+<tr>
+<td>reflexion</td>
+<td style="text-align: right;">0.47</td>
+<td style="text-align: right;">0.20</td>
+<td>−0.27</td>
+</tr>
+<tr>
+<td>react</td>
+<td style="text-align: right;">0.13</td>
+<td style="text-align: right;">0.40</td>
+<td>+0.27</td>
+</tr>
+</tbody>
+</table>
+<p>Run-to-run, on the <em>same</em> frozen model and temperature, the success rates swung by up to 0.33. That means this article&rsquo;s specific numbers are this-run-specific, and even N=15 isn&rsquo;t a large enough sample to pin the rankings for this particular model. The <strong>ordering of approximate tiers</strong> is stable across runs (single_shot always near the top, reflexion always near the bottom), but exact ordering of the middle isn&rsquo;t.</p>
+<p>For models that need stable rankings in articles or dashboards, N=15 × one run on <code>glm-4.7-flash</code> is not enough. You&rsquo;d want several runs across model instances or seeds &gt;=5 before calling any middle-of-the-pack ranking real.</p>
+<h3 id="where-the-time-went">Where the time went</h3>
+<p><img alt="HTML wall-clock heatmap" src="wall_clock_heatmap-glm-20260423.png" /></p>
+<p>Every orange/red square is a cell where the harness was running in circles. <code>plan_execute</code> burned its turn budget on nearly every task; <code>minimal</code> earned its better score this run by also trying more selectors, at a cost of 1,059 seconds total wall-clock.</p>
+<h3 id="what-this-costs-if-youre-paying-by-the-token">What this costs if you&rsquo;re paying by the token</h3>
+<p>These numbers ran on a free local model (zero API dollars). If the same matrix ran against a frontier model at list prices (~$2.50/M input, ~$10/M output):</p>
+<table>
+<thead>
+<tr>
+<th>harness</th>
+<th style="text-align: right;">approx cost / extraction</th>
+<th>at 10,000 tasks/day</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>single_shot</td>
+<td style="text-align: right;">~$0.0045</td>
+<td>~$16,000 / year</td>
+</tr>
+<tr>
+<td>minimal</td>
+<td style="text-align: right;">~$0.030</td>
+<td>~$109,000 / year</td>
+</tr>
+<tr>
+<td>reflexion</td>
+<td style="text-align: right;">~$0.036</td>
+<td>~$131,000 / year</td>
+</tr>
+<tr>
+<td>plan_execute</td>
+<td style="text-align: right;"><strong>~$0.045</strong></td>
+<td><strong>~$164,000 / year</strong></td>
+</tr>
+</tbody>
+</table>
+<p><code>plan_execute</code> costs roughly 10× per task for a <em>lower</em> success rate. At any meaningful volume, that&rsquo;s six-figure ceremony paid for an agent that gets the answer less often than the baseline. Real cost-sensitive production teams measure this before picking a framework; most don&rsquo;t.</p>
+<hr />
+<h2 id="part-2-code-generation-easy-tasks">Part 2 — Code generation (easy tasks)</h2>
+<p><strong>Task</strong>: implement 5 Python functions (fizzbuzz, fibonacci, is_anagram, binary_search, word_count) that pass a pytest suite. <strong>Deterministic grader</strong>: run the task&rsquo;s tests against the submission; success = pytest exit 0.</p>
+<p><strong>Result</strong>: <strong>every harness scored 15/15</strong>. These are textbook algorithm problems that <code>glm-4.7-flash</code> solves on the first try. The question shifts from &ldquo;which works?&rdquo; to &ldquo;which is wasteful?&rdquo;</p>
+<h3 id="headline-chart_1">Headline chart</h3>
+<p><img alt="code-gen resource bars" src="resource_bars-code-glm-20260423.png" /></p>
+<table>
+<thead>
+<tr>
+<th>harness</th>
+<th style="text-align: right;">wall-clock</th>
+<th style="text-align: right;">input tokens</th>
+<th>verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>single_shot</td>
+<td style="text-align: right;">283 s</td>
+<td style="text-align: right;">6,438</td>
+<td>fastest + cheapest</td>
+</tr>
+<tr>
+<td>retry_on_fail</td>
+<td style="text-align: right;">328 s</td>
+<td style="text-align: right;">6,168</td>
+<td>ready if first try fails (wasn&rsquo;t needed here)</td>
+</tr>
+<tr>
+<td>react</td>
+<td style="text-align: right;">381 s</td>
+<td style="text-align: right;">9,189</td>
+<td>35% slower than single_shot</td>
+</tr>
+<tr>
+<td>test_driven</td>
+<td style="text-align: right;">478 s</td>
+<td style="text-align: right;"><strong>35,469</strong></td>
+<td>6× the tokens for zero accuracy gain</td>
+</tr>
+<tr>
+<td>chain_of_thought</td>
+<td style="text-align: right;"><strong>598 s</strong></td>
+<td style="text-align: right;">6,573</td>
+<td>2× wall-clock of single_shot for CoT prompting</td>
+</tr>
+</tbody>
+</table>
+<h3 id="per-task-wall-clock">Per-task wall-clock</h3>
+<p><img alt="code-gen wall-clock heatmap" src="wall_clock_heatmap-code-glm-20260423.png" /></p>
+<p><code>single_shot</code> runs every task in 13–24 seconds. <code>chain_of_thought</code> sits at 30–56 seconds per task — the step-by-step prompt generates reasoning tokens the model has to produce before getting to the code.</p>
+<h4 id="where-test_drivens-extra-29000-input-tokens-went">Where test_driven&rsquo;s extra 29,000 input tokens went</h4>
+<p><code>test_driven</code> ran the pytest subprocess <strong>30 times</strong> across the 75-cell matrix — that&rsquo;s 2.0 <code>run_tests</code> calls per cell on average. Each call feeds the full pytest output back (up to ~1,500 chars) into the model&rsquo;s context as a tool_result.</p>
+<p>Per cell: base prompt + signature ≈ 400 tokens; first model reply with code ≈ 300 tokens out; a <code>run_tests</code> result ≈ 300 tokens back in; second model reply ≈ 300 tokens out. With ~3 turns per cell that&rsquo;s 1,000 input + 900 output per cell. Times 15 cells ≈ 15k in + 13k out — actual: 35k in + 9k out. The input side blew up more than estimated because every retry feeds the <strong>full</strong> test output back, not just the summary.</p>
+<p>The extra tokens are paying for &ldquo;insurance against the first attempt failing.&rdquo; <strong>On this task set, the first attempt did not fail a single time.</strong> The insurance was never needed.</p>
+<h3 id="token-efficiency">Token efficiency</h3>
+<p><img alt="code-gen token efficiency" src="token_efficiency-code-glm-20260423.png" /></p>
+<p>All points sit at y=1.0 (perfect score). The only comparison is horizontal. <code>test_driven</code> is alone on the far right at 35k input tokens; everyone else sits around 6–9k. Almost a <strong>6× gap</strong> in tokens for identical accuracy.</p>
+<h4 id="what-was-surprising-about-the-code-gen-run">What was surprising about the code-gen run</h4>
+<p>Three things, none of them what I expected going in:</p>
+<ol>
+<li><strong>Every harness scored 100%.</strong> I expected at least <code>retry_on_fail</code> to justify itself by rescuing a failed first attempt. It didn&rsquo;t — because no first attempts failed. <code>glm-4.7-flash</code> at <code>max_tokens=2048</code> solved every one of these five textbook algorithm problems on the first try, across 15 attempts per harness. A task set with ambiguous problems, tricky edge cases, or multi-file scope would produce a different shape; these are deliberately well-posed.</li>
+<li><strong><code>chain_of_thought</code> is expensive and offered nothing here.</strong> &ldquo;Think step by step&rdquo; is everywhere in agent-engineering posts. On these tasks it produced 2× wall-clock over <code>single_shot</code> with the same success rate. Reasoning tokens the model has to generate before getting to the answer, for answers it already had. Not an argument against CoT in general — multi-step math and constraint satisfaction likely need it — but the signal here is clear: toy algorithms the model knows by heart don&rsquo;t benefit.</li>
+<li><strong><code>test_driven</code>&rsquo;s tool-use is impressive but wasteful on this task set.</strong> It successfully called <code>run_tests</code> 30 times across the matrix and responded correctly to pytest output. The plumbing works. But because the first draft was already correct, most of those 30 tool calls were &ldquo;run tests on code I already know works&rdquo; — pure confirmation. On tasks with a realistic first-attempt failure rate, this pattern would be valuable. Matching harness to task is everything.</li>
+</ol>
+<hr />
+<h2 id="the-combined-lesson">The combined lesson</h2>
+<p>Two experiments, two failure shapes, one conclusion:</p>
+<p><em>[Diagram omitted for Medium — control-flow diagram.]</em></p>
+<p>On hard tasks, the failure is &ldquo;extra turns introduce new failure modes faster than they add accuracy.&rdquo; On easy tasks, the failure is &ldquo;extra turns waste time and tokens for accuracy the model already had.&rdquo; The two shapes converge on the same engineering advice.</p>
+<hr />
+<h2 id="when-complex-harnesses-do-pay-the-honest-limit">When complex harnesses DO pay (the honest limit)</h2>
+<p>Not all complexity is waste. Three conditions under which <code>test_driven</code>, <code>reflexion</code>, or <code>plan_execute</code> legitimately earn their tokens:</p>
+<ol>
+<li><strong>First-shot accuracy is genuinely below target.</strong> If <code>single_shot</code> hits 95%, no retry loop helps. If it hits 40%, every extra turn is a real chance to climb.</li>
+<li><strong>Failures are structurally recoverable.</strong> The model needs a signal it can act on — a concrete test failure, a visible schema mismatch, a tool error with a clear cause. A 12-turn loop that feeds the model <code>NO_MATCH</code> over and over is not recovery; it&rsquo;s paying to fail more elaborately.</li>
+<li><strong>Multi-turn tool-use reliability exceeds ~90% per turn.</strong> Below that, each extra turn multiplies the odds of SDK-boundary errors. On weak models, complexity accelerates failure instead of correcting it.</li>
+</ol>
+<p>On a stronger model (Claude Sonnet 4.6, GPT-4o, Gemini 2.5), all three conditions plausibly hold. <code>test_driven</code>-style loops probably do pay there. On the local <code>glm-4.7-flash</code> used here, none of the three held, so none of the complex harnesses did.</p>
+<p>Know which regime you&rsquo;re in before picking a harness.</p>
+<hr />
+<h2 id="the-three-takeaways-that-actually-matter">The three takeaways that actually matter</h2>
+<p><strong>1. Always benchmark <code>single_shot</code> first.</strong> Fifteen lines of code. If it hits your target, ship it. The fancy framework is a cost you can only justify against a measured gap.</p>
+<p><strong>2. <code>seeds=1</code> lies. On weak models, <code>seeds=3</code> lies about middle rankings.</strong> Two independent N=15 runs of this matrix moved middle-of-the-pack rankings by up to 0.33. If ordering matters in your eval, run the matrix multiple times; don&rsquo;t just add more seeds within one run.</p>
+<p><strong>3. Harness complexity pays returns only when first-shot is below target AND failures are multi-turn-recoverable.</strong> Both conditions rarely hold at once on weak models. Check your regime before adding a retry loop.</p>
+<hr />
+<h2 id="seven-takeaways-the-full-list-for-engineers">Seven takeaways (the full list, for engineers)</h2>
+<ol>
+<li><strong>Always run <code>single_shot</code> as your baseline.</strong> If it hits your accuracy target, ship it. You will not find a faster, cheaper, more reliable harness.</li>
+<li><strong>Before investing in multi-turn harnesses, check your model&rsquo;s single-shot schema compliance.</strong> Our <code>glm-4.7-flash</code> hit 100% compliance on <code>single_shot</code> but its multi-turn tool loops drift. If schema compliance is below ~90%, multi-turn harnesses will underperform on that model.</li>
+<li><strong><code>seeds=1</code> is not enough — and on some models, <code>seeds=3</code> isn&rsquo;t either.</strong> Three of five rankings flipped between our N=5 pilot and the first N=15 run on HTML. Then two independent N=15 runs of the same matrix moved the middle-of-the-pack rankings by up to 0.33. If the ordering matters, you want multiple independent runs, not just multiple seeds in one run.</li>
+<li><strong>The <code>submit_answer</code> universal output channel was load-bearing.</strong> Every harness uses the same submission tool — no free-form text parsing. Eliminates a huge class of weak-model failures.</li>
+<li><strong><code>plan_execute</code> needs a feedback loop from executor to plan.</strong> The executor gets <code>NO_MATCH</code> back on ~70% of CSS selector calls because the planner writes selectors before seeing the HTML. Minimum viable fix: a <code>revise_plan</code> tool. Correct fix: let the planner see the HTML.</li>
+<li><strong>Tool-call error handling belongs in the harness, not the SDK.</strong> <code>ResponseError: mismatched arg_key</code> propagated as hard termination on multiple <code>react</code> and <code>reflexion</code> cells. A naive &ldquo;retry once on malformed tool_call&rdquo; loop would have recovered most of these.</li>
+<li><strong>&ldquo;Harness complexity dominates within a tier&rdquo; is a conditional claim.</strong> It&rsquo;s only true where the base model&rsquo;s first-shot success rate is <em>below target</em> AND <em>multi-turn-recoverable</em>. On <code>glm-4.7-flash</code>, the HTML tasks failed condition 2 (model drifts on multi-turn); the code tasks failed condition 1 (model hit 100% first-shot). Complex harnesses paid returns in neither experiment.</li>
+</ol>
+<hr />
+<h2 id="your-monday-action">Your Monday action</h2>
+<p>Before your next sprint, add one 15-line <code>single_shot</code> baseline to your eval harness. Make it the first row in your results table. If your production agent — whatever framework it&rsquo;s built on — doesn&rsquo;t beat the baseline by more than 10%, rip out the production agent.</p>
+<p>Most of the ceremony around modern agents is paid for a problem the model already solved in one call.</p>
+<hr />
+<h2 id="honest-scope">Honest scope</h2>
+<ul>
+<li><strong>Two pilots, not two benchmarks.</strong> 5 tasks × 3 seeds per experiment. Wilson CIs overlap for most pairs on HTML; on code-gen every harness hit 15/15 so CIs are uniform [0.80, 1.00].</li>
+<li><strong>Run-to-run variance is real on this model.</strong> Two independent N=15 HTML runs produced middle-of-the-pack rankings that differ by up to 0.33. The <em>approximate tiers</em> (single_shot near top, reflexion near bottom) are stable; exact ordering within tiers isn&rsquo;t. The numbers in this article are from the most recent run; rerunning would produce different specifics with a similar shape.</li>
+<li><strong>One model.</strong> <code>glm-4.7-flash</code> is an open-source 19 GB checkpoint on CPU-heavy local inference. Results on Claude Sonnet, GPT-4o, or Gemini 2.0 could reshuffle every ordering.</li>
+<li><strong>No held-out fixtures.</strong> All HTML pages and code tasks were visible during harness development. See <a href="../HELD_OUT.md"><code>HELD_OUT.md</code></a> for the explicit decision.</li>
+<li><strong>Eight tag-moves in the commit log.</strong> Every move documented in <a href="../HARNESSES_FROZEN.md"><code>HARNESSES_FROZEN.md</code></a> with a reason. No move happened after a matrix had been run against the newer tag — peek-and-patch is structurally prevented by the <code>check_freeze_gate()</code> pre-flight.</li>
+</ul>
+<hr />
+<h2 id="reproduce-either-experiment">Reproduce either experiment</h2>
+<pre><code class="language-bash">git clone https://github.com/jaafar-benabderrazak/harness-bench &amp;&amp; cd harness-bench
+pip install -e &quot;.[dev]&quot;
+cp .env.example .env         # ollama + glm-4.7-flash default, no API key required
+ollama pull glm-4.7-flash:latest
+pytest -q                    # 55 tests, all offline
+
+# HTML extraction matrix (~60 min on a modest CPU/GPU)
+python scripts/run_full.py --seeds 3 --yes
+
+# Code generation matrix (~25-35 min)
+python scripts/run_code_benchmark.py --seeds 3 --yes
+
+# Post-process — produces CSV, all charts, article, trace viewer
+python scripts/make_chart.py
+</code></pre>
+<p>Everything reproduces locally. Zero API dollars. The run files for the numbers in this article live in <code>results/runs/</code> (gitignored per-run; produced fresh on each execution).</p>
+<hr />
+<h4 id="repo-links">Repo + links</h4>
+<ul>
+<li><a href="https://github.com/jaafar-benabderrazak/harness-bench">Full repo</a> — source, tests, all 8 harness implementations, 2 task types, 55-test offline suite</li>
+<li><a href="https://github.com/jaafar-benabderrazak/harness-bench/blob/main/scripts/demo_matrix.py">Offline demo</a> — exercises the pipeline with a deterministic fake model (no API spend, no local model needed)</li>
+<li><a href="../HELD_OUT.md"><code>HELD_OUT.md</code></a> — held-out fixture decision + rationale</li>
+<li><a href="../HARNESSES_FROZEN.md"><code>HARNESSES_FROZEN.md</code></a> — freeze manifest + tag-move log</li>
+<li><a href="../README.md"><code>README.md</code></a> — quickstart, pre-registered hypothesis</li>
+<li>Raw trace data lives in <code>traces/{harness}/{task}/*.jsonl</code>; every number here reproducible via <code>python scripts/make_chart.py</code> on a committed run file</li>
+<li>Freeze commit: <code>9977e85</code> (<code>git rev-parse harnesses-frozen</code>)</li>
+</ul>
+</body>
+</html>

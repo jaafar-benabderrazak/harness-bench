@@ -9,9 +9,9 @@ title: harness_eng
 
 ## Read the writeup
 
-**[→ Full combined article](writeup/article.html)** — one page, both experiments, all the forensics behind `<details>` toggles, Mermaid diagrams for every harness, and a cross-experiment conclusion.
+**[→ Full combined article](writeup/article.html)** — one page, both experiments, detailed per-harness breakdowns with framework analogs (LangChain / LangGraph / CrewAI / Aider / Cursor), forensics behind `<details>` toggles, Mermaid diagrams, dollar extrapolation at frontier-model list prices, and a cross-experiment conclusion.
 
-**[→ LinkedIn-friendly version](writeup/article-linkedin.html)** — sharpened hook, plain-text flow, framework mapping (LangChain / LangGraph / CrewAI / Aider), and a "what this costs if you're paying by the token" extrapolation. Same data, different audience.
+**[→ Medium-ready HTML version](writeup/article-medium.html)** — same content rendered as clean HTML (no Mermaid, no collapsibles), suitable for import into Medium, Substack, or any editor that accepts HTML paste.
 
 ## The one-line finding
 

@@ -31,8 +31,8 @@ On the frozen model (`claude-sonnet-4-6`, temperature 0, max_tokens 2048) and th
 
 **Writeups:**
 
-- [`writeup/article.md`](writeup/article.md) — full combined article, both task types across all eight harnesses, charts + forensics + Mermaid diagrams. Also rendered at [jaafar-benabderrazak.github.io/harness-bench](https://jaafar-benabderrazak.github.io/harness-bench/writeup/article.html).
-- [`writeup/article-linkedin.md`](writeup/article-linkedin.md) — LinkedIn-friendly cut (no Mermaid, plain-text flow, sharpened hook + framework mapping to LangChain / LangGraph / CrewAI / Aider).
+- [`writeup/article.md`](writeup/article.md) — full combined article, both task types across all eight harnesses, per-harness descriptions with framework analogs (LangChain / LangGraph / CrewAI / Aider / Cursor), charts + forensics + Mermaid diagrams + dollar extrapolation. Rendered at [jaafar-benabderrazak.github.io/harness-bench](https://jaafar-benabderrazak.github.io/harness-bench/writeup/article.html).
+- [`writeup/article-medium.html`](writeup/article-medium.html) — HTML rendering of the same article, Mermaid diagrams stripped and `<details>` collapsibles flattened. Suitable for pasting into Medium, Substack, or any editor that accepts HTML.
 
 The experiment ran on `glm-4.7-flash:latest` via Ollama rather than Claude Sonnet — pragmatic pivot to avoid a billing block. On this model, the pre-registered ordering **did not hold**.
 
