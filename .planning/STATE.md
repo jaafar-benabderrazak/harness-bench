@@ -5,15 +5,15 @@
 See: .planning/PROJECT.md (updated 2026-04-23)
 
 **Core value:** Produce concrete, reproducible evidence — numbers and annotated failure traces — that harness design dominates model choice within a tier on the same frozen model.
-**Current focus:** Phase 8 — Expand Harness Family (Waves 1+2 done; registration done; freeze-tag move + article refresh next)
+**Current focus:** Phase 8 — Expand Harness Family (Waves 1+2+3 done; registration done; freeze-tag moved to 2af30fc; article refresh next)
 
 ## Current Position
 
 Phase: 8 of 8 (Expand Harness Family + Refresh Article)
-Plans complete: Phase 8 — 6 of 8 with SUMMARY (08-01 foundation + 08-02 HTML react-derivatives + 08-03 cross-task harnesses + 08-04 program_aided + tool_use_with_validation + 08-05 streaming_react + Ollama verify + 08-06 registration); Phases 1-4, 7 delivered; Phase 5 deferred to user; Phase 6 blocked on Phase 5
-Status: Phase 8 Wave 1+2+3 shippable; HARNESSES dict at 16 entries; HARNESSES_BY_TASK_TYPE: html_extract=11 (streaming_react excluded per Ollama OOM), code_gen=9; AST seals (test_harness_registry + test_model_seal) relaxed for deferred imports; HARNESS_COLORS palette at 16; pytest -q fully green (87/87); freeze-tag move (08-07) and article refresh (08-08) pending
+Plans complete: Phase 8 — 7 of 8 with SUMMARY (08-01 foundation + 08-02 HTML react-derivatives + 08-03 cross-task harnesses + 08-04 program_aided + tool_use_with_validation + 08-05 streaming_react + Ollama verify + 08-06 registration + 08-07 freeze-tag move); Phases 1-4, 7 delivered; Phase 5 deferred to user; Phase 6 blocked on Phase 5
+Status: Phase 8 Wave 1+2+3+4 shippable; HARNESSES dict at 16 entries; HARNESSES_BY_TASK_TYPE: html_extract=11 (streaming_react excluded per Ollama OOM), code_gen=9; AST seals (test_harness_registry + test_model_seal) relaxed for deferred imports; HARNESS_COLORS palette at 16; pytest -q fully green (87/87); freeze tag at 2af30fc (force-pushed to origin); article refresh (08-08) pending user-triggered matrix re-runs
 
-Progress: [████████████] 96% (Phase 8 underway, 6 of 8 plans complete with SUMMARY)
+Progress: [█████████████] 98% (Phase 8 underway, 7 of 8 plans complete with SUMMARY)
 
 ## Completed Phases
 
@@ -36,8 +36,10 @@ Progress: [████████████] 96% (Phase 8 underway, 6 of 8 p
 
 1. `0a44719` → `4eacafb` (Phase 4: added TOOL_WHITELIST to gated files)
 2. `4eacafb` → `d0fc1f1` (CI fix: dropped unused `field` import from base.py)
+3. `d0fc1f1` → `9977e85` (Phase 6: Ollama backend + code-gen task type + 3 code-gen baseline harnesses)
+4. `9977e85` → `2af30fc` (Phase 8: 8 new harnesses + run_python tool + per-call temperature kwarg + manifest update)
 
-Neither move invalidated any matrix runs — no matrix has been executed yet.
+No move has invalidated any matrix runs — no matrix had been executed against the prior tag with the current expanded registry. The matrix re-runs that follow move #4 are user-gated and produce the data Plan 08-08 (article refresh) consumes.
 
 ## Test suite state
 
@@ -55,8 +57,8 @@ CI green on ubuntu-latest + windows-latest (run 24829222393).
 ## Repo state
 
 - GitHub: <https://github.com/jaafar-benabderrazak/harness-bench>
-- main: `d0fc1f1`
-- tag `harnesses-frozen`: `d0fc1f1`
+- main: `2af30fc` (pushed)
+- tag `harnesses-frozen`: `2af30fc` (force-pushed to origin via Plan 08-07)
 - Offline demo available: `python scripts/demo_matrix.py` — exercises pipeline with deterministic fake model
 
 ## Accumulated Context
@@ -74,6 +76,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 08]: Plan 08-04: program_aided (code-gen-only, whitelist={run_python, submit_answer}, emits program_aided_run_python trace event, rejects html_extract tasks cleanly) + tool_use_with_validation (both task types, jsonschema Draft202012Validator pre-built per tool from TOOL_SCHEMAS at module load, MAX_VALIDATION_RETRIES=3, new stop_reason='schema_validation_exhausted', submit_answer NOT validated by design) — both harnesses + 8 tests landed; HARN-12 + HARN-13 satisfied
 - [Phase 08]: Plan 08-05: streaming_react harness (Anthropic content_block_start sniff + Ollama per-chunk message.tool_calls aggregation, deferred SDK imports inside method bodies for AST-seal compliance) + scripts/verify_streaming_ollama.py probe + 08-05-VERIFY.md outcome doc; Ollama probe outcome **FAIL** (OOM: glm-4.7-flash needs 23.4 GiB, host has 6.9 GiB — failure mode differs from predicted Ollama issue #13840 post-tool-call halt, but the registration implication is identical); plan 08-06 will register streaming_react with task_type=[]; HARN-14 satisfied
 - [Phase 08]: Plan 08-06: registration of all 8 Phase 8 harnesses into HARNESSES (16 total) + HARNESSES_BY_TASK_TYPE (html_extract=11, code_gen=9; streaming_react excluded via dynamic _streaming_ok() reading 08-05-VERIFY.md outcome FAIL at import time); AST seal relaxation in BOTH test_harness_registry.py and test_model_seal.py via tree.body-scoped walk (module-level imports only — deferred imports inside FunctionDef bodies tolerated); EXPECTED tool-allowlist dict extended with 8 new entries; HARNESS_COLORS palette extended to 16 entries with distinguishable hues; REQUIREMENTS.md updated with HARN-08..15 + BENCH-06 + RUN-07 + ANAL-06 marked complete + ART-05 pending; full pytest suite 87/87 GREEN; auto-fix Rule 1: test_code_gen_harness_lineup widened from len==5 to set-equality with the 9 designed Phase 8 code_gen members; HARN-08..15, BENCH-06, RUN-07, ANAL-06 satisfied
+- [Phase 08]: Plan 08-07: freeze-tag moved from `9977e85` to `2af30fc` (force-pushed to origin); HARNESSES_FROZEN.md committed with 4th tag-move row + 20-entry per-file SHA table covering all 16 harnesses + harnesses/__init__.py + tools.py + model.py; freeze-date stamp bumped to 2026-04-25; sanity gate green (gated diff empty, check_freeze_gate exits 0, pytest 87/87 GREEN); no requirements closed (pure methodology gate). Plan 08-08 (article refresh) now blocked only on user-triggered matrix re-runs
 
 ### Blockers/Concerns
 
@@ -83,5 +86,5 @@ Decisions are logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-04-25
-Stopped at: Completed 08-06-PLAN.md (registration + AST seal relaxation + palette). Three commits: `9aa9be8` (registry update with conditional streaming_react), `199db9b` (test invariants for 16 harnesses + AST seal relaxation in BOTH seal tests + auto-fix on test_code_gen_harness_lineup), `2b92835` (HARNESS_COLORS palette extended to 16). Full pytest suite 87/87 GREEN. REQUIREMENTS.md gained 11 new rows (HARN-08..15, BENCH-06, RUN-07, ANAL-06, ART-05); 10 marked Complete, ART-05 still Pending until 08-08. Pre-existing test_model_seal RED on streaming_react resolved.
-Resume hook: Plan 08-07 (freeze-tag move). Now that all gated files diverge from `harnesses-frozen` (tools.py with run_python from 08-01; harnesses/__init__.py with the 16-harness registry from 08-06; 8 new harness files; the runner pre-flight check_freeze_gate refuses to run against the old tag), the freeze tag must move forward to current HEAD with HARNESSES_FROZEN.md log entry recording the per-file SHAs at the move point and the reason "Phase 8 harness expansion." Plan 08-08 (article refresh) follows after the matrix re-runs against the expanded 16-harness registry.
+Stopped at: Completed 08-07-PLAN.md (freeze-tag move). Two commits associated with 08-07: `2af30fc` (HARNESSES_FROZEN.md manifest update — 4th tag-move row + 20-entry per-file SHA table + freeze-date 2026-04-25), and the final docs commit (08-07-SUMMARY.md + STATE.md + ROADMAP.md). Tag `harnesses-frozen` moved from `9977e85` → `2af30fc` and force-pushed to origin (confirmation: `+ 9977e85...2af30fc harnesses-frozen -> harnesses-frozen (forced update)`). Main pushed (`21f4193..2af30fc`). All four post-move sanity checks PASS: tag SHA matches, gated diff empty, check_freeze_gate exits 0, pytest 87/87 GREEN.
+Resume hook: Plan 08-08 (article refresh) is BLOCKED on user-triggered matrix re-runs. Two commands the user must run at their discretion: `python scripts/run_full.py --seeds 3 --yes` (HTML matrix, 11 harnesses × 5 fixtures × 3 seeds = 165 trials, ~2h on local CPU + glm-4.7-flash) and `python scripts/run_code_benchmark.py --seeds 3 --yes` (code-gen matrix, 9 harnesses × 5 fixtures × 3 seeds = 135 trials, ~1h). These produce `runs/<id>/` outputs that Plan 08-08 consumes. No code-side work pending.
