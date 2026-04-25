@@ -10,10 +10,10 @@ See: .planning/PROJECT.md (updated 2026-04-23)
 ## Current Position
 
 Phase: 8 of 8 (Expand Harness Family + Refresh Article)
-Plans complete: Phase 8 — 1 of 8 (08-01 foundation done); Phases 1-4, 7 delivered; Phase 5 deferred to user; Phase 6 blocked on Phase 5
-Status: Phase 8 Wave 1 (foundation) shippable; Wave 2 (HTML react-derivatives + cross-task harnesses) ready to plan
+Plans complete: Phase 8 — 2 of 8 (08-01 foundation + 08-03 cross-task harnesses done); Phases 1-4, 7 delivered; Phase 5 deferred to user; Phase 6 blocked on Phase 5
+Status: Phase 8 Wave 1 (foundation) + part of Wave 2 (multi_agent + self_consistency) shippable; remaining Wave 2 + Wave 3 + registration to plan
 
-Progress: [█████████░] 87% (Phase 8 underway, 1 of 8 plans complete)
+Progress: [█████████░] 88% (Phase 8 underway, 2 of 8 plans complete)
 
 ## Completed Phases
 
@@ -41,10 +41,12 @@ Neither move invalidated any matrix runs — no matrix has been executed yet.
 
 ## Test suite state
 
-59/59 passing as of `d45a6ac` (Plan 08-01 foundation merged):
+`pytest tests/test_multi_agent.py tests/test_self_consistency.py` → 8/8 pass as of `920cebc` (Plan 08-03 merged).
 
+- Plan 08-03 added: test_multi_agent (3 control-flow tests), test_self_consistency (5 tests including AST-normalized voting).
 - Plan 08-01 added: test_tools (+2 run_python tests → 8 total), test_model_usage (+2 temperature tests → 4 total). test_tool_allowlist fake_call mock widened to **_kw for forward-compat.
 - Pre-Phase-8 baseline: 41 tests as of `d0fc1f1`. The +14 above 45 (41 + 4 expected) come from test files added in interim work (test_trace_summary etc.) not previously listed in STATE.md.
+- Pre-existing AST-seal failure (test_model_seal) on `harnesses/streaming_react.py` is documented in `.planning/phases/08-expand-harness-family/deferred-items.md` — not introduced by Plan 08-03; my new files (multi_agent.py + self_consistency.py) both pass the seal individually.
 
 CI green on ubuntu-latest + windows-latest (run 24829222393).
 
@@ -65,6 +67,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - Single frozen model (Claude Sonnet 4.6): multi-provider comparison is a separate project.
 - Universal `submit_answer` tool for all harnesses: eliminates free-form-text parsing as a confound (Pitfall 12).
 - [Phase 08]: Plan 08-01: foundation surface (run_python tool + jsonschema runtime dep + per-call temperature override on model.call and _step_model) landed in gated files; freeze-tag move deferred to Plan 08-07
+- [Phase 08]: Plan 08-03: multi_agent (3 isolated histories, Handoff TypedDict, UNION whitelist, single bounded retry) + self_consistency (N=5 @ T=0.7, per-field majority HTML, AST-normalized majority code returning raw winning sample) — both harnesses + 8 tests landed; HARN-09 + HARN-11 satisfied
 
 ### Blockers/Concerns
 
@@ -74,5 +77,5 @@ Decisions are logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-04-25
-Stopped at: Completed 08-01-PLAN.md. Foundation surface (run_python + jsonschema + temperature) merged in three atomic commits (`26e8021`, `46d499e`, `d45a6ac`). Gated files now diverge from `harnesses-frozen` tag — expected and intentional for Phase 8 duration; tag moves in Plan 08-07.
-Resume hook: continue with Plan 08-02 (Wave 2: HTML react-derivatives — `tree_of_thoughts`, `react_with_replan`, `cached_react`).
+Stopped at: Completed 08-03-PLAN.md. multi_agent + self_consistency merged in two atomic commits (`f74b886`, `920cebc`). 8/8 control-flow tests pass. Both files AST-seal-clean. Note: working tree at start contained other Phase 8 plans' uncommitted artifacts (08-02, 08-04, 08-05); those have since landed in their own commits (`815ca89`, `25a9165`, `47307d1`, `3888ac5`) — not authored by this plan executor.
+Resume hook: Plan 08-06 (registration) can now wire multi_agent + self_consistency into HARNESSES_BY_TASK_TYPE alongside other Wave-2/3 harnesses. Plan 08-07 (freeze-tag move) must wait for ALL Wave-2/3 plans to land. Plan 08-05 has a known AST-seal violation on streaming_react.py — see deferred-items.md.
