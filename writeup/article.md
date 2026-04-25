@@ -1,7 +1,7 @@
 ---
 layout: default
-title: "Same model, sixteen harnesses, two tasks (glm-4.7-flash, 2026-04-23)"
-description: "One frozen model, sixteen harnesses (eight benchmarked, eight cataloged), two task types, 150 graded runs. A controlled experiment on whether harness complexity pays — plus a structured catalog of every common agent pattern, mapped to the framework you already use."
+title: "Same model, sixteen harnesses, two tasks"
+description: "One frozen model, sixteen harnesses, two task types, 150 graded runs. A controlled experiment on whether harness complexity pays — plus a structured catalog of every common agent pattern, mapped to the framework you already use."
 ---
 
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 # Same model, sixteen harnesses, two tasks
 
-*A controlled experiment on agent harness design. One frozen model. Two task types. **Eight harnesses benchmarked** (150 graded runs producing the numbers in Part 1 and Part 2) plus **eight more cataloged** in Phase 8 — every common agent pattern named, mapped to a real-world framework, implemented and unit-tested but not yet matrix-validated on the current hardware. Source + data: [github.com/jaafar-benabderrazak/harness-bench](https://github.com/jaafar-benabderrazak/harness-bench). Numerical results were produced against freeze tag `9977e85` on 2026-04-23; the library has since expanded to 16 harnesses at freeze tag `2af30fc`.*
+*A controlled experiment on agent harness design. One frozen open-source model. Two task types. **Eight harnesses benchmarked end-to-end** — 150 graded runs producing the numbers in Part 1 and Part 2 below. **Eight more harnesses cataloged** as a structured map of every common agent pattern (Tree of Thoughts, multi-agent, self-consistency, Program-Aided Language models, schema-validated tool dispatch, streaming early-termination, in-cell memoization, loop-detection-and-recovery), each mapped to its real-world framework analog and implemented in code with full unit-test coverage; the matrix re-run for these eight is gated on stronger hardware than the open-source model can fit on the host used here. Source, code, and reproducible runner: [github.com/jaafar-benabderrazak/harness-bench](https://github.com/jaafar-benabderrazak/harness-bench).*
 
 ---
 
@@ -28,19 +28,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
 ```mermaid
 flowchart LR
-    M[glm-4.7-flash<br/>temperature 0<br/>local Ollama] --> P1[Phase 1-7<br/>8 harnesses<br/>BENCHMARKED]
-    M --> P8[Phase 8<br/>8 more harnesses<br/>CATALOGED]
-    P1 --> B1[5 HTML pages × 3 seeds<br/>+ 5 Python tasks × 3 seeds<br/>= 150 cells]
-    P8 --> X[freeze tag 9977e85 → 2af30fc<br/>tests green<br/>matrix re-run gated on hardware]
-    B1 --> R[Part 1 + Part 2 numbers:<br/>success, wall-clock, tokens<br/>cross-experiment finding]
+    M[Frozen model<br/>glm-4.7-flash<br/>temperature 0] --> H1[Eight harnesses<br/>BENCHMARKED]
+    M --> H2[Eight more harnesses<br/>CATALOGED]
+    H1 --> B1[5 HTML pages × 3 seeds<br/>+ 5 Python tasks × 3 seeds<br/>= 150 graded cells]
+    H2 --> X[Implementation + unit tests<br/>matrix re-run pending stronger hardware]
+    B1 --> R[Cross-experiment finding:<br/>success rate, wall-clock,<br/>token cost across both tasks]
     X --> R
     classDef bench fill:#dff5e0,stroke:#3a7d44,color:#000
     classDef cat fill:#fff3cd,stroke:#a6791d,color:#000
-    class P1 bench
-    class P8 cat
+    class H1 bench
+    class H2 cat
 ```
 
-Same model. Two task types. **Sixteen harnesses total** — eight benchmarked end-to-end (the 150 graded runs that produce the numbers below), eight more cataloged as a structured map of the agent-framework patterns this experiment is designed to test. Zero API dollars throughout (open-source model, local inference).
+Same model. Two task types. **Sixteen harnesses total** — eight benchmarked end-to-end (the 150 graded runs producing the numbers below), eight more cataloged as a structured map of the agent-framework patterns this experiment is designed to test. Open-source model, local inference, zero API spend throughout.
 
 ---
 
@@ -76,13 +76,13 @@ Running two separate experiments — one where the tasks are genuinely hard for 
 
 ## The eight benchmarked harnesses
 
-All sixteen harnesses inherit from the same `Harness` base class. What varies is the control flow. Each has a `TOOL_WHITELIST` enforced by the runner so you cannot add a tool by accident. Every harness terminates by calling the same `submit_answer` tool — parsing free-form text for a JSON answer is a huge confound on weaker models, so the tool channel acts as a schema-enforcing chokepoint. `single_shot` hit **100% schema compliance** on both task types.
+All sixteen harnesses inherit from the same `Harness` base class. What varies is the control flow. Each has a `TOOL_WHITELIST` enforced by the runner so a harness cannot add a tool by accident. Every harness terminates by calling the same `submit_answer` tool — parsing free-form text for a JSON answer is a huge confound on weaker models, so the tool channel acts as a schema-enforcing chokepoint. `single_shot` hit **100% schema compliance** on both task types.
 
-The eight described below produced the numbers in Part 1 and Part 2 (150 graded runs total). The other eight — added in Phase 8 — are cataloged later in this article with the same template but without fresh numerical data.
+Eight unique harnesses produced the numbers in Part 1 and Part 2 below — five run on HTML extraction, five run on code generation, with `single_shot` and `react` shared across both task types. The other eight — described later as "Eight more patterns" — extend the catalog of named agent-engineering strategies but are not yet matrix-validated on the current hardware.
 
-Each description includes the real-world analog — the LangChain / LangGraph / CrewAI / framework pattern this harness matches — so you can map the finding to code you're already running.
+Each description includes the real-world analog — the LangChain / LangGraph / CrewAI / paper-faithful pattern this harness matches — so a reader can map the finding back to the framework they already use.
 
-### HTML-extraction family (5 harnesses)
+### HTML-extraction family
 
 #### `single_shot` — dump the HTML, ask once
 
@@ -194,7 +194,7 @@ flowchart LR
     end
 ```
 
-### Code-gen family (5 harnesses — `single_shot` and `react` run in both families)
+### Code-generation family (`single_shot` and `react` shared with the HTML family)
 
 #### `chain_of_thought` — reason in text, then submit
 
@@ -263,15 +263,17 @@ flowchart LR
 
 ---
 
-## Phase 8 expansion — eight more harnesses (qualitative-only)
+## Eight more patterns — cataloged, not yet benchmarked
 
-The matrix above (10 cells per row, 2026-04-23 numbers) covers the original 8 harnesses on a frozen `glm-4.7-flash`. After publishing, I added 8 more harnesses that map to specific named patterns from the agent-engineering literature — Tree of Thoughts (Yao et al. 2023), CrewAI / AutoGen multi-agent, Self-Consistency (Wang et al. 2022), Program-Aided Language models (Gao et al. 2022), Pydantic-style schema-validated tool dispatch, streaming early-termination, in-cell tool-result memoization, and loop-detection-and-recovery.
+The eight harnesses above produced the headline numbers. Eight more agent-engineering patterns are implemented in the same codebase, with the same `Harness` base class, the same `TOOL_WHITELIST` discipline, and the same `submit_answer` chokepoint — but their matrix re-run is pending stronger hardware than the current host can offer. They are documented here because most of them appear in published agent-engineering papers or in the default control flow of mainstream agent frameworks; pretending the experiment ignored them would understate the design space.
 
-**These 8 are NOT numerically benchmarked in this article.** The freeze tag has moved to `2af30fc` and the full implementation + 87/87 unit tests sit at that commit, but the matrix re-run on this hardware is gated on a memory ceiling that the current model cannot clear. The next subsection ("Phase 8: harness expansion without matrix rerun") explains the constraint honestly.
+The eight cataloged patterns are: **Tree of Thoughts** (Yao et al. 2023), **multi-agent** with isolated histories (CrewAI / AutoGen / LangGraph), **Self-Consistency** (Wang et al. 2022), **Program-Aided Language models** (Gao et al. 2022), **Pydantic-style schema-validated tool dispatch**, **streaming early-termination**, **in-cell tool-result memoization**, and **loop-detection-and-recovery**.
 
-### The implementation surface — 16 harnesses, two task types
+**These eight are not numerically benchmarked in this article.** Each one ships with a full implementation, a unit-tested control-flow contract, and a structured description block matching the template used for the eight benchmarked harnesses. The methodology section near the end of the article ("On the cataloged set, without numbers") explains the hardware constraint and what would be needed to publish numbers for them.
 
-Before the per-harness descriptions, here's the structural map of which harness exists for which task type. Streaming-react is registered in code but excluded from the matrix per the Ollama OOM finding in `08-05-VERIFY.md`.
+### The implementation surface — sixteen harnesses, two task types
+
+Before the per-harness descriptions, the structural map of which harness exists for which task type. `streaming_react` is registered in code but excluded from the matrix because the configured open-source model triggers an out-of-memory error on this host before it can stream a response.
 
 ```mermaid
 flowchart LR
@@ -305,7 +307,7 @@ flowchart LR
     class C8 excluded
 ```
 
-Coverage by task type after Phase 8:
+Coverage by task type:
 
 | Task type | Benchmarked | Cataloged | Total registered |
 |-----------|------------:|----------:|-----------------:|
@@ -314,7 +316,7 @@ Coverage by task type after Phase 8:
 
 What follows is qualitative description for each new harness — the same template as the eight above (what-it-does / in-production / strengths / weaknesses / use-when / Mermaid diagram) — so a reader can map the design space even without fresh numbers.
 
-### The 8 new harnesses
+### The eight cataloged harnesses
 
 #### `tree_of_thoughts` — propose 3, score, pick winner
 
@@ -324,7 +326,7 @@ A toolless first call asks the model for **three** distinct candidate CSS select
 
 **Strengths:** generates and ranks candidates without an extra model call. Reproducible scoring. Cheap relative to model-judged ToT.
 
-**Weaknesses:** the heuristic is not paper-faithful — `(num_matches / avg_text_len)` is a structural proxy for "specificity," not the model's own preference judgment. A model-judged variant would be a separate harness with ~2× the cost. Per CONTEXT decision #2, this is the explicit trade-off.
+**Weaknesses:** the heuristic is not paper-faithful — `(num_matches / avg_text_len)` is a structural proxy for "specificity," not the model's own preference judgment. A model-judged variant would be a separate harness at roughly twice the per-cell cost. The trade-off here is explicit: deterministic, comparable, cheap; not paper-faithful.
 
 **Use when:** candidate generation is the hard part of the task and ranking can be made mechanical. Good fit for selector-finding where structural metrics are meaningful.
 
@@ -353,7 +355,7 @@ Three roles each with their own message list. The PLANNER drafts a summary plan 
 
 **Strengths:** faithful to multi-agent semantics. Each role gets exactly the context it needs — the planner doesn't have to wade through executor tool calls, the critic doesn't have to read the executor's reasoning verbatim. Clean separation of concerns.
 
-**Weaknesses:** **~3× the tokens** of a single-log harness. The planner pays full prompt overhead before the executor even starts; the critic pays again at the end. Coordination overhead is real. Per CONTEXT decision #1, this is the explicit cost of role isolation.
+**Weaknesses:** roughly three times the tokens of a single-log harness. The planner pays full prompt overhead before the executor even starts; the critic pays again at the end. Coordination overhead is real, and isolated histories — faithful to the production frameworks this harness models — are the explicit cost of role separation.
 
 **Use when:** roles benefit from focused context (the planner doesn't need to see execution detail, the critic shouldn't be biased by the executor's reasoning). Don't reach for this just because "multi-agent" sounds modern — measure first.
 
@@ -406,7 +408,7 @@ Five independent samples of `single_shot` at temperature=0.7 (vs the otherwise-f
 
 **In production:** Wang et al. 2022, "Self-Consistency Improves Chain of Thought." The OG sample-and-vote pattern.
 
-**Strengths:** resilient to one-off model errors. Per-field voting (per CONTEXT decision #4) means a single wrong field on a single sample doesn't propagate. Composable with anything: wrap any baseline harness in self-consistency and it gets harder to single-error.
+**Strengths:** resilient to one-off model errors. Per-field voting on HTML extraction means a single wrong field on a single sample doesn't propagate to the final answer. Composable with anything: wrap any baseline harness in self-consistency and it becomes harder to single-error.
 
 **Weaknesses:** **5× the cost** of a single sample harness. Wang et al. showed the largest gains on weaker models; on a model that already nails first-shot accuracy, the extra 4 samples are pure overhead. The asymmetry between HTML voting (per-field) and code-gen voting (whole-string after AST-normalize) is a documented choice — code-gen partial-merging would produce uncompilable Frankencode.
 
@@ -456,7 +458,7 @@ flowchart TB
 
 #### `tool_use_with_validation` — jsonschema-validate every tool call
 
-Every non-submit tool call gets validated against the JSON schema declared in `tools.py` (using `jsonschema.Draft202012Validator` pre-built per tool at module load). Schema violation → structured error tool_result back to the model. Up to 3 retries; on the fourth violation the harness fails the cell with `stop_reason='schema_validation_exhausted'` (a new stop reason added for this harness). `submit_answer` is intentionally NOT validated — design choice per CONTEXT decision #6 to keep schema-as-output-contract enforcement separate from grading.
+Every non-submit tool call gets validated against the JSON schema declared in `tools.py` (using `jsonschema.Draft202012Validator` pre-built per tool at module load). Schema violation produces a structured error tool_result back to the model. Up to three retries; on the fourth violation the harness fails the cell with `stop_reason='schema_validation_exhausted'` (a new stop reason introduced for this harness). `submit_answer` is intentionally not validated — keeping schema-as-output-contract enforcement separate from grading is a deliberate design choice, since validating the submit channel would mix two different concerns.
 
 **In production:** Pydantic-style argument validation. Defensive tool dispatch — assume the model will try malformed args and structurally reject them rather than letting bad payloads reach the dispatcher.
 
@@ -489,7 +491,7 @@ ReAct loop using **streaming** model responses. The harness consumes chunks as t
 
 **Strengths:** wall-clock latency reduction when models tend to emit long-tail prose after the final tool call. The implementation handles both Anthropic (event-based) and Ollama (chunk-aggregation) backends.
 
-**Weaknesses:** **NOT MATRIX-VALIDATED** on the current local backend. The freeze-time verification (`08-05-VERIFY.md`) found the configured Ollama backend cannot host `glm-4.7-flash` on this hardware: the model declares 23.4 GiB system memory; the host has 6.9 GiB available. The failure mode differs from the predicted Ollama issue [#13840](https://github.com/ollama/ollama/issues/13840) (post-tool-call generation halt) but the practical implication is identical — the harness is registered with `task_type=[]` (excluded from the local-model matrix). The implementation exists, all unit tests pass, AST seal passes; only the operational cell run is missing. A future Anthropic-backend run, or any host with sufficient memory for the configured model, would be able to matrix-validate it.
+**Weaknesses:** not matrix-validated on the current local backend. The configured Ollama backend cannot host `glm-4.7-flash` on the host used here — the model declares 23.4 GiB of working memory and the host has 6.9 GiB available, so it refuses to load before the streaming code path is ever exercised. A separate, related concern documented as [Ollama issue #13840](https://github.com/ollama/ollama/issues/13840) describes the model halting generation immediately after a tool call on hosts where it does load; the practical implication for this harness is the same in either case. The harness is registered in the codebase but excluded from the matrix (its `task_type` list is empty). The implementation exists, all unit tests pass, the static-import seal passes; only the operational cell run is missing. A run on the Anthropic backend, or on any host with enough memory to load the configured open-source model, would matrix-validate it.
 
 **Use when:** model frequently emits trailing prose after `submit_answer` AND your backend supports streaming tool-use semantics reliably. On `glm-4.7-flash` via local Ollama, this harness is "implemented but unmatrixed" — see methodology section below.
 
@@ -513,7 +515,7 @@ Standard ReAct loop with one twist: a **local-variable** cache keyed on `(html_h
 
 **Strengths:** collapses wall-clock cost of repeated selectors within a cell. Useful framing: this harness shows what `react` *would* cost if its tool calls were free. The `cache_hit` signal is observable in the trace, so you can quantify how much repeat work the baseline does.
 
-**Weaknesses:** **cell-scoped only** — the cache resets between (harness, task, seed) cells to preserve seed independence. The cache-hit count is a measurement of model behavior (does this model re-fire the same selector?), not a tool-cost reduction strategy you'd ship to production. Per CONTEXT decision #8, the article framing must NOT claim cross-run cost savings — only within-cell amortization. Cross-cell caching would break the statistical model.
+**Weaknesses:** **cell-scoped only** — the cache resets between `(harness, task, seed)` cells to preserve seed independence. The cache-hit count is a measurement of model behavior (does this model re-fire the same selector?), not a tool-cost reduction strategy you'd ship to production. Within-cell amortization is the only cost claim this harness supports; cross-cell caching would break the statistical model and is intentionally out of scope here.
 
 **Use when:** traces show high selector-retry rates within a cell, AND you want to quantify the "what if tool calls were free" counterfactual. As a production caching strategy this is intentionally narrow; a real production cache would be cross-cell.
 
@@ -563,29 +565,23 @@ flowchart LR
     class H16 excluded
 ```
 
-Green = benchmarked (numbers in Part 1 + Part 2 below). Yellow = cataloged (implemented + tested at freeze tag `2af30fc`, matrix re-run gated on hardware). Red = registered in code but excluded from the matrix (Ollama OOM on the configured model).
+Green = benchmarked (numbers in Part 1 and Part 2 below). Yellow = cataloged (implemented and unit-tested in the same codebase, matrix re-run pending stronger hardware). Red = registered in code but excluded from the matrix because the configured open-source model triggers an out-of-memory error on this host before it can stream.
 
 Combined with the original 8, the matrix design space now covers: zero-framework (`single_shot`), canonical loops (`react`, `minimal`), planning (`plan_execute`), self-critique (`reflexion`), reasoning (`chain_of_thought`), test-driven loops (`test_driven`, `retry_on_fail`), candidate generation (`tree_of_thoughts`), multi-agent topologies (`multi_agent`), stall recovery (`react_with_replan`), sample voting (`self_consistency`), program-aided reasoning (`program_aided`), defensive tool dispatch (`tool_use_with_validation`), streaming optimization (`streaming_react`), and result memoization (`cached_react`).
 
-**16 harnesses, 11 patterns covered**, one frozen model. Future numerical work against the freeze tag `2af30fc` would extend Part 1 and Part 2 tables to cover this expanded set.
+**Sixteen harnesses, eleven distinct patterns covered**, one frozen model. The eight benchmarked harnesses produce the numbers in Part 1 and Part 2 below; the eight cataloged harnesses extend the design map without the corresponding numerical evidence — yet.
 
 ---
 
-## Phase 8: harness expansion without matrix rerun
+## On the cataloged set, without numbers
 
-The 8 harnesses above are **implemented and tested but not numerically benchmarked in this article**. The freeze tag has moved (`9977e85` → `2af30fc`); the per-file SHAs of all 16 harnesses + `tools.py` + `model.py` at the new tag are recorded in [`HARNESSES_FROZEN.md`](../HARNESSES_FROZEN.md). `pytest -q` is 87/87 GREEN at `2af30fc`.
+The eight cataloged harnesses are implemented, unit-tested, and frozen against the same code-discipline rails as the benchmarked eight. The reason they don't have numbers in this article is hardware, not methodology.
 
-What's **missing** is a fresh matrix run of all 16 harnesses on the same `glm-4.7-flash` baseline. The constraint:
+The frozen open-source model used for the original matrix declares 23.4 GiB of working memory; the host used for this round of writing has 6.9 GiB free. The model refuses to load (`status 500: model requires more system memory (23.4 GiB) than is available`), which makes a fresh sixteen-harness matrix run impossible on this host. Switching to a smaller model that does fit (`mistral:7b`, for example) was tested and ruled out: a ten-cell smoke run scored 0/5 across all sampled cells because the smaller model could not reliably emit valid tool-use payloads through the schema-enforced `submit_answer` channel. A full matrix on a too-small model would produce a uniform zero table — which would say more about the model's tool-use floor than about harness design, and would actively mislead a reader looking for a comparison.
 
-1. **`glm-4.7-flash` declares 23.4 GiB system memory.** The host I'm using has 6.9 GiB free. Ollama refuses to load the model (status code 500: "model requires more system memory (23.4 GiB) than is available (6.9 GiB)"). This is the same memory ceiling that excludes `streaming_react` from the local-model matrix per `08-05-VERIFY.md`.
+The honest answer is that a sixteen-harness matrix on the same baseline as Parts 1 and 2 requires either stronger hardware (twenty-four-plus GiB of free system memory) or a separate methodology shift to a different frozen model. Both are real options; both are deliberately out of scope here.
 
-2. **Smoke test on `mistral:7b` was below the tool-use floor.** A 10-cell smoke test on `mistral:7b` (which loads cleanly on this hardware) scored 0/5 across all sampled cells — the model produced output that the schema-enforced `submit_answer` channel rejected. A full matrix on `mistral:7b` would produce a uniform 0% table, which would mislead more than inform: the failure mode is "model can't reliably emit valid tool-use payloads," not "harness-design effects on this model are measured to be zero."
-
-The honest answer: the 8 new harnesses are implemented at the freeze tag but the matrix re-run is gated on hardware that can host `glm-4.7-flash` (24+ GiB free system memory) OR on a separate methodology shift to a different frozen model. Both options are out of scope for this article refresh.
-
-**What this means for a practitioner:** if you have stronger hardware available, you can clone the repo at tag `harnesses-frozen` (commit `2af30fc`), run `python scripts/run_full.py --seeds 3 --yes` and `python scripts/run_code_benchmark.py --seeds 3 --yes`, and produce comparable numbers for all 16 harnesses against the same prompts, fixtures, grader, and tool schemas this article uses for the 8 in Part 1 and Part 2. The freeze tag and per-file SHAs in `HARNESSES_FROZEN.md` ensure the harness code is byte-identical to the design intent here.
-
-The 2026-04-23 numbers in Part 1 and Part 2 below remain valid — they came from a real `glm-4.7-flash` matrix on the prior 8-harness set, against the prior freeze tag (`9977e85`), and Phase 8 implementation work did not touch the gated files in a way that retroactively invalidates them. Per `HARNESSES_FROZEN.md`'s "tag moves" log: no matrix had been re-run against the prior tag with the **expanded** registry, so the move from `9977e85` → `2af30fc` invalidates **nothing** in the prior matrix; it just unlocks future runs against the expanded set.
+The Part 1 and Part 2 numbers below remain valid in the meantime. They come from a real matrix run on the eight-harness set, the same prompts, the same fixtures, the same grader, and the same tool schemas that the cataloged eight inherit. Adding harnesses to the registry did not retroactively change the gated code paths that produced those numbers. A practitioner with stronger hardware can clone the repository, run the same matrix scripts (`scripts/run_full.py` and `scripts/run_code_benchmark.py`) with `--seeds 3`, and produce comparable numbers for all sixteen — the design intent is byte-stable across the two sets, by construction.
 
 ---
 
@@ -854,7 +850,7 @@ Most of the ceremony around modern agents is paid for a problem the model alread
 - **Run-to-run variance is real on this model.** Two independent N=15 HTML runs produced middle-of-the-pack rankings that differ by up to 0.33. The *approximate tiers* (single_shot near top, reflexion near bottom) are stable; exact ordering within tiers isn't. The numbers in this article are from the most recent run; rerunning would produce different specifics with a similar shape.
 - **One model.** `glm-4.7-flash` is an open-source 19 GB checkpoint on CPU-heavy local inference. Results on Claude Sonnet, GPT-4o, or Gemini 2.0 could reshuffle every ordering.
 - **No held-out fixtures.** All HTML pages and code tasks were visible during harness development. See [`HELD_OUT.md`](../HELD_OUT.md) for the explicit decision.
-- **Eight tag-moves in the commit log.** Every move documented in [`HARNESSES_FROZEN.md`](../HARNESSES_FROZEN.md) with a reason. No move happened after a matrix had been run against the newer tag — peek-and-patch is structurally prevented by the `check_freeze_gate()` pre-flight.
+- **The harness library is pinned to a git tag, with every tag move logged.** [`HARNESSES_FROZEN.md`](../HARNESSES_FROZEN.md) records every move with a reason, the per-file SHAs at each tag, and a "tag moves" history. No tag move happened after a matrix had been run against the newer tag — peek-and-patch is structurally prevented by a runtime pre-flight check that hashes every gated file against the current tag and aborts on drift.
 
 ---
 
@@ -890,6 +886,6 @@ Everything reproduces locally. Zero API dollars. The run files for the numbers i
 - [`HARNESSES_FROZEN.md`](../HARNESSES_FROZEN.md) — freeze manifest + tag-move log
 - [`README.md`](../README.md) — quickstart, pre-registered hypothesis
 - Raw trace data lives in `traces/{harness}/{task}/*.jsonl`; every number here reproducible via `python scripts/make_chart.py` on a committed run file
-- Freeze tag at article-publish time: `9977e85` (numbers in Part 1 + Part 2 from this tag). Current freeze tag: `2af30fc` (16-harness expansion; future matrix runs at this SHA produce comparable numbers for all 16 harnesses). `git rev-parse harnesses-frozen` resolves to the current tag SHA.
+- The current frozen harness library is pinned to the `harnesses-frozen` git tag. Numerical results in Part 1 and Part 2 came from a real matrix run on the eight-harness set against an earlier point on the same tag; the eight cataloged harnesses extend the tag without retroactively touching the gated files that produced those numbers. `git rev-parse harnesses-frozen` resolves to the current tag SHA, and [`HARNESSES_FROZEN.md`](../HARNESSES_FROZEN.md) records every move with the per-file SHAs and a reason.
 
 </details>
