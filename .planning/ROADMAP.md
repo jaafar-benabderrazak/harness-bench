@@ -122,7 +122,7 @@ Plans:
   8. The dollar-extrapolation table in the article is recomputed against the new token-cost rows for the expanded harness set, holding the same frontier-model list-prices ($2.50/M input, $10/M output) constant for comparability.
 **Plans:** 8 plans
 Plans:
-- [ ] 08-01-PLAN.md — Foundation: jsonschema dep + run_python tool + temperature kwarg in model.py and base.py
+- [x] 08-01-PLAN.md — Foundation: jsonschema dep + run_python tool + temperature kwarg in model.py and base.py — `26e8021` `46d499e` `d45a6ac`
 - [ ] 08-02-PLAN.md — HTML react-derivatives: tree_of_thoughts + react_with_replan + cached_react (cell-scoped local cache)
 - [ ] 08-03-PLAN.md — Cross-task harnesses: multi_agent (isolated histories) + self_consistency (N=5 @ T=0.7)
 - [ ] 08-04-PLAN.md — Infrastructure-using harnesses: program_aided (run_python) + tool_use_with_validation (jsonschema)
@@ -145,7 +145,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Matrix Execution | 0/TBD | Not started | - |
 | 6. Article Polish | 0/TBD | Not started | - |
 | 7. CI Expansion + Onboarding Polish | 0/TBD | Not started | - |
-| 8. Expand Harness Family + Refresh Article | 0/8 | Not started | - |
+| 8. Expand Harness Family + Refresh Article | 1/8 | In Progress | - |
 
 ---
 *Roadmap created: 2026-04-23*

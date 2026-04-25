@@ -5,15 +5,15 @@
 See: .planning/PROJECT.md (updated 2026-04-23)
 
 **Core value:** Produce concrete, reproducible evidence — numbers and annotated failure traces — that harness design dominates model choice within a tier on the same frozen model.
-**Current focus:** Phase 5 — Matrix Execution (user-side; API spend gated)
+**Current focus:** Phase 8 — Expand Harness Family (Wave 1 done; Wave 2 next)
 
 ## Current Position
 
-Phase: 5 of 7 (Matrix Execution)
-Plans complete: 6 of 7 phases delivered; Phase 5 deferred to user; Phase 6 blocked on Phase 5 output
-Status: All code-side work shippable; awaiting real matrix run for article
+Phase: 8 of 8 (Expand Harness Family + Refresh Article)
+Plans complete: Phase 8 — 1 of 8 (08-01 foundation done); Phases 1-4, 7 delivered; Phase 5 deferred to user; Phase 6 blocked on Phase 5
+Status: Phase 8 Wave 1 (foundation) shippable; Wave 2 (HTML react-derivatives + cross-task harnesses) ready to plan
 
-Progress: [█████████░] 86% (6 of 7 phases delivered; Phase 6 is narrative work blocked on Phase 5)
+Progress: [█████████░] 87% (Phase 8 underway, 1 of 8 plans complete)
 
 ## Completed Phases
 
@@ -41,9 +41,10 @@ Neither move invalidated any matrix runs — no matrix has been executed yet.
 
 ## Test suite state
 
-41/41 passing as of `d0fc1f1`:
+59/59 passing as of `d45a6ac` (Plan 08-01 foundation merged):
 
-- test_cost_estimator (2), test_freeze_gate (4), test_grader (5), test_grader_determinism (2), test_harness_registry (3), test_model_seal (1), test_model_usage (2), test_run_manifest (2), test_stats (5), test_tasks (2), test_tool_allowlist (4), test_tool_result_rebilling (1), test_tools (6), test_trace_schema (2)
+- Plan 08-01 added: test_tools (+2 run_python tests → 8 total), test_model_usage (+2 temperature tests → 4 total). test_tool_allowlist fake_call mock widened to **_kw for forward-compat.
+- Pre-Phase-8 baseline: 41 tests as of `d0fc1f1`. The +14 above 45 (41 + 4 expected) come from test files added in interim work (test_trace_summary etc.) not previously listed in STATE.md.
 
 CI green on ubuntu-latest + windows-latest (run 24829222393).
 
@@ -63,6 +64,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - No held-out fixtures (HELD_OUT.md): Option A — all 5 fixtures used in dev + matrix. Value of held-out split is marginal at 5-fixture scale; article's "honest scope" section states this plainly.
 - Single frozen model (Claude Sonnet 4.6): multi-provider comparison is a separate project.
 - Universal `submit_answer` tool for all harnesses: eliminates free-form-text parsing as a confound (Pitfall 12).
+- [Phase 08]: Plan 08-01: foundation surface (run_python tool + jsonschema runtime dep + per-call temperature override on model.call and _step_model) landed in gated files; freeze-tag move deferred to Plan 08-07
 
 ### Blockers/Concerns
 
@@ -71,6 +73,6 @@ Decisions are logged in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-04-23
-Stopped at: Phase 5 handoff. CI green on push. Offline demo validates the pipeline. Waiting on user to run the real matrix.
-Resume hook: share `results/summary.csv` + interesting traces from `traces/` → resume with Phase 6.
+Last session: 2026-04-25
+Stopped at: Completed 08-01-PLAN.md. Foundation surface (run_python + jsonschema + temperature) merged in three atomic commits (`26e8021`, `46d499e`, `d45a6ac`). Gated files now diverge from `harnesses-frozen` tag — expected and intentional for Phase 8 duration; tag moves in Plan 08-07.
+Resume hook: continue with Plan 08-02 (Wave 2: HTML react-derivatives — `tree_of_thoughts`, `react_with_replan`, `cached_react`).
