@@ -19,6 +19,15 @@ EXPECTED = {
     "chain_of_thought": {"submit_answer"},
     "test_driven": {"check_syntax", "run_tests", "submit_answer"},
     "retry_on_fail": {"submit_answer"},
+    # Phase 8 — agent-pattern family
+    "tree_of_thoughts": {"css_select", "submit_answer"},
+    "multi_agent": {"read_html", "css_select", "extract_text", "check_syntax", "run_tests", "submit_answer"},
+    "react_with_replan": {"read_html", "css_select", "extract_text", "submit_answer"},
+    "self_consistency": {"submit_answer"},
+    "program_aided": {"run_python", "submit_answer"},
+    "tool_use_with_validation": {"read_html", "css_select", "extract_text", "check_syntax", "run_tests", "submit_answer"},
+    "streaming_react": {"read_html", "css_select", "extract_text", "submit_answer"},
+    "cached_react": {"read_html", "css_select", "extract_text", "submit_answer"},
 }
 
 

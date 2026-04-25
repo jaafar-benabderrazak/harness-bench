@@ -48,8 +48,18 @@ def test_new_harnesses_registered():
 
 
 def test_code_gen_harness_lineup():
-    """HARNESSES_BY_TASK_TYPE['code_gen'] references existing harnesses and is size 5."""
+    """HARNESSES_BY_TASK_TYPE['code_gen'] references existing harnesses.
+
+    Phase 1-7: 5 harnesses. Phase 8 expansion adds multi_agent, self_consistency,
+    program_aided, tool_use_with_validation → 9 total. Asserts membership + that
+    every name is registered.
+    """
     lineup = HARNESSES_BY_TASK_TYPE["code_gen"]
-    assert len(lineup) == 5
+    assert set(lineup) == {
+        # Phase 1-7
+        "single_shot", "react", "chain_of_thought", "test_driven", "retry_on_fail",
+        # Phase 8 code-gen additions
+        "multi_agent", "self_consistency", "program_aided", "tool_use_with_validation",
+    }
     for name in lineup:
         assert name in HARNESSES
