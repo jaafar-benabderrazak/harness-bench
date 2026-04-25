@@ -10,10 +10,10 @@ See: .planning/PROJECT.md (updated 2026-04-23)
 ## Current Position
 
 Phase: 8 of 8 (Expand Harness Family + Refresh Article)
-Plans complete: Phase 8 — 2 of 8 (08-01 foundation + 08-03 cross-task harnesses done); Phases 1-4, 7 delivered; Phase 5 deferred to user; Phase 6 blocked on Phase 5
-Status: Phase 8 Wave 1 (foundation) + part of Wave 2 (multi_agent + self_consistency) shippable; remaining Wave 2 + Wave 3 + registration to plan
+Plans complete: Phase 8 — 3 of 8 with SUMMARY (08-01 foundation + 08-03 cross-task harnesses + 08-04 program_aided + tool_use_with_validation); 08-02 and 08-05 file commits landed but their SUMMARY.md not yet authored by their respective executors; Phases 1-4, 7 delivered; Phase 5 deferred to user; Phase 6 blocked on Phase 5
+Status: Phase 8 Wave 1 (foundation) shippable; Wave 2 partially landed (multi_agent, self_consistency, program_aided, tool_use_with_validation); registration (08-06) and freeze-tag move (08-07) pending
 
-Progress: [█████████░] 88% (Phase 8 underway, 2 of 8 plans complete)
+Progress: [█████████░] 89% (Phase 8 underway, 3 of 8 plans complete with SUMMARY)
 
 ## Completed Phases
 
@@ -41,12 +41,13 @@ Neither move invalidated any matrix runs — no matrix has been executed yet.
 
 ## Test suite state
 
-`pytest tests/test_multi_agent.py tests/test_self_consistency.py` → 8/8 pass as of `920cebc` (Plan 08-03 merged).
+`pytest tests/test_program_aided.py tests/test_tool_use_with_validation.py` → 8/8 pass as of `47307d1` + `3888ac5` (Plan 08-04 merged). Combined plan-08-03 + plan-08-04 control-flow targeted suite: 16/16 pass.
 
+- Plan 08-04 added: test_program_aided (3 control-flow tests: run_python-before-submit, html-task rejection, whitelist invariant), test_tool_use_with_validation (5 control-flow tests: validate-pass, validate-fail-required, unknown-tool-passes, 3-violations-yield-exhausted, valid-flow-to-submit).
 - Plan 08-03 added: test_multi_agent (3 control-flow tests), test_self_consistency (5 tests including AST-normalized voting).
 - Plan 08-01 added: test_tools (+2 run_python tests → 8 total), test_model_usage (+2 temperature tests → 4 total). test_tool_allowlist fake_call mock widened to **_kw for forward-compat.
 - Pre-Phase-8 baseline: 41 tests as of `d0fc1f1`. The +14 above 45 (41 + 4 expected) come from test files added in interim work (test_trace_summary etc.) not previously listed in STATE.md.
-- Pre-existing AST-seal failure (test_model_seal) on `harnesses/streaming_react.py` is documented in `.planning/phases/08-expand-harness-family/deferred-items.md` — not introduced by Plan 08-03; my new files (multi_agent.py + self_consistency.py) both pass the seal individually.
+- Pre-existing AST-seal failure (test_model_seal) on `harnesses/streaming_react.py` is documented in `.planning/phases/08-expand-harness-family/deferred-items.md` — not introduced by Plan 08-04; both new files (program_aided.py + tool_use_with_validation.py) pass the seal individually.
 
 CI green on ubuntu-latest + windows-latest (run 24829222393).
 
@@ -68,6 +69,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - Universal `submit_answer` tool for all harnesses: eliminates free-form-text parsing as a confound (Pitfall 12).
 - [Phase 08]: Plan 08-01: foundation surface (run_python tool + jsonschema runtime dep + per-call temperature override on model.call and _step_model) landed in gated files; freeze-tag move deferred to Plan 08-07
 - [Phase 08]: Plan 08-03: multi_agent (3 isolated histories, Handoff TypedDict, UNION whitelist, single bounded retry) + self_consistency (N=5 @ T=0.7, per-field majority HTML, AST-normalized majority code returning raw winning sample) — both harnesses + 8 tests landed; HARN-09 + HARN-11 satisfied
+- [Phase 08]: Plan 08-04: program_aided (code-gen-only, whitelist={run_python, submit_answer}, emits program_aided_run_python trace event, rejects html_extract tasks cleanly) + tool_use_with_validation (both task types, jsonschema Draft202012Validator pre-built per tool from TOOL_SCHEMAS at module load, MAX_VALIDATION_RETRIES=3, new stop_reason='schema_validation_exhausted', submit_answer NOT validated by design) — both harnesses + 8 tests landed; HARN-12 + HARN-13 satisfied
 
 ### Blockers/Concerns
 
@@ -77,5 +79,5 @@ Decisions are logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-04-25
-Stopped at: Completed 08-03-PLAN.md. multi_agent + self_consistency merged in two atomic commits (`f74b886`, `920cebc`). 8/8 control-flow tests pass. Both files AST-seal-clean. Note: working tree at start contained other Phase 8 plans' uncommitted artifacts (08-02, 08-04, 08-05); those have since landed in their own commits (`815ca89`, `25a9165`, `47307d1`, `3888ac5`) — not authored by this plan executor.
-Resume hook: Plan 08-06 (registration) can now wire multi_agent + self_consistency into HARNESSES_BY_TASK_TYPE alongside other Wave-2/3 harnesses. Plan 08-07 (freeze-tag move) must wait for ALL Wave-2/3 plans to land. Plan 08-05 has a known AST-seal violation on streaming_react.py — see deferred-items.md.
+Stopped at: Completed 08-04-PLAN.md. program_aided committed in `47307d1`; tool_use_with_validation files were authored for 08-04 but the commit was preempted by a parallel 08-05 agent that staged them under `3888ac5` (file contents byte-identical — verified via empty `git diff HEAD`). Misattribution documented in 08-04-SUMMARY Issues Encountered. 8/8 plan-08-04 control-flow tests pass; 78/79 full-suite (1 pre-existing test_model_seal failure on streaming_react.py — Plan 08-05 territory, deferred-items.md).
+Resume hook: Plan 08-06 (registration) can wire program_aided into HARNESSES_BY_TASK_TYPE["code_gen"] and tool_use_with_validation into BOTH lists, alongside multi_agent + self_consistency + 08-02 harnesses (tree_of_thoughts, react_with_replan, cached_react). Plan 08-06 is also the right place to bulk-add HARN-08..15 rows to REQUIREMENTS.md and check off HARN-09/11/12/13. Plan 08-07 (freeze-tag move) must still wait for 08-05 streaming_react seal-fix and registration to land.
