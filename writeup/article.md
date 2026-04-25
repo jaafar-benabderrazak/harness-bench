@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 # Same model, eight harnesses, two benchmarks
 
-*A two-part controlled experiment on agent harness design. One frozen model. Two task types. 150 runs. Source + data: [github.com/jaafar-benabderrazak/harness-bench](https://github.com/jaafar-benabderrazak/harness-bench). Freeze commit: `9977e85`.*
+*A two-part controlled experiment on agent harness design. One frozen model. Two task types. 150 runs. Source + data: [github.com/jaafar-benabderrazak/harness-bench](https://github.com/jaafar-benabderrazak/harness-bench). Numerical results in Part 1 and Part 2 are from `glm-4.7-flash` against freeze tag `9977e85` on 2026-04-23. Freeze tag has since moved to `2af30fc` (16-harness expansion — see "Phase 8 expansion" below); the new harnesses are implemented and tested but not yet matrix-validated on this hardware.*
 
 ---
 
@@ -256,6 +256,268 @@ flowchart LR
         R3 -->|no| R5[show pytest<br/>output] --> R6[attempt 2/3] --> R3
     end
 ```
+
+---
+
+## Phase 8 expansion — eight more harnesses (qualitative-only)
+
+The matrix above (10 cells per row, 2026-04-23 numbers) covers the original 8 harnesses on a frozen `glm-4.7-flash`. After publishing, I added 8 more harnesses that map to specific named patterns from the agent-engineering literature — Tree of Thoughts (Yao et al. 2023), CrewAI / AutoGen multi-agent, Self-Consistency (Wang et al. 2022), Program-Aided Language models (Gao et al. 2022), Pydantic-style schema-validated tool dispatch, streaming early-termination, in-cell tool-result memoization, and loop-detection-and-recovery.
+
+**These 8 are NOT numerically benchmarked in this article.** The freeze tag has moved to `2af30fc` and the full implementation + 87/87 unit tests sit at that commit, but the matrix re-run on this hardware is gated on a memory ceiling that the current model cannot clear. The next subsection ("Phase 8: harness expansion without matrix rerun") explains the constraint honestly.
+
+What follows is qualitative description for each harness — the same template as the 8 above (what-it-does / in-production / strengths / weaknesses / use-when / Mermaid diagram) — so a reader can map the design space even without fresh numbers.
+
+### The 8 new harnesses
+
+#### `tree_of_thoughts` — propose 3, score, pick winner
+
+A toolless first call asks the model for **three** distinct candidate CSS selectors. Each candidate runs through `css_select`; the harness scores results deterministically by `num_matches / mean_text_length` (more matches with shorter text = a more specific hit). The highest-scoring selector's text feeds a final `submit_answer` call.
+
+**In production:** Yao et al. 2023 "Tree of Thoughts" (heuristic-scored variant — the paper itself uses model self-evaluation; this harness substitutes a deterministic score to avoid doubling per-cell cost).
+
+**Strengths:** generates and ranks candidates without an extra model call. Reproducible scoring. Cheap relative to model-judged ToT.
+
+**Weaknesses:** the heuristic is not paper-faithful — `(num_matches / avg_text_len)` is a structural proxy for "specificity," not the model's own preference judgment. A model-judged variant would be a separate harness with ~2× the cost. Per CONTEXT decision #2, this is the explicit trade-off.
+
+**Use when:** candidate generation is the hard part of the task and ranking can be made mechanical. Good fit for selector-finding where structural metrics are meaningful.
+
+```mermaid
+flowchart LR
+    subgraph tot["tree_of_thoughts · propose 3, score, pick winner"]
+        direction LR
+        T1[user + task] --> T2[toolless model call:<br/>propose 3 selectors]
+        T2 --> S1["css_select #1"]
+        T2 --> S2["css_select #2"]
+        T2 --> S3["css_select #3"]
+        S1 --> SC[score = num_matches /<br/>mean_text_length]
+        S2 --> SC
+        S3 --> SC
+        SC --> W[pick highest-scoring<br/>winner]
+        W --> F[final model call<br/>with winner's text]
+        F --> A["submit_answer(fields)"]
+    end
+```
+
+#### `multi_agent` — planner + executor + critic, isolated histories
+
+Three roles each with their own message list. The PLANNER drafts a summary plan (its messages never see executor traces). The EXECUTOR runs a ReAct loop with full tool access (its messages never see the planner's reasoning). The CRITIC reviews the executor's candidate output (its messages never see either of the prior message lists). Handoffs between roles are explicit `Handoff` TypedDicts copied into the next role's user message — no shared state.
+
+**In production:** CrewAI / AutoGen / LangGraph multi-agent topologies. Any framework where each agent has its own focused context window and roles negotiate via structured messages.
+
+**Strengths:** faithful to multi-agent semantics. Each role gets exactly the context it needs — the planner doesn't have to wade through executor tool calls, the critic doesn't have to read the executor's reasoning verbatim. Clean separation of concerns.
+
+**Weaknesses:** **~3× the tokens** of a single-log harness. The planner pays full prompt overhead before the executor even starts; the critic pays again at the end. Coordination overhead is real. Per CONTEXT decision #1, this is the explicit cost of role isolation.
+
+**Use when:** roles benefit from focused context (the planner doesn't need to see execution detail, the critic shouldn't be biased by the executor's reasoning). Don't reach for this just because "multi-agent" sounds modern — measure first.
+
+```mermaid
+flowchart TB
+    subgraph ma["multi_agent · planner + executor + critic, isolated histories"]
+        direction TB
+        T[user + task] --> Pl[PLANNER<br/>own messages list]
+        Pl --> H1[Handoff dict:<br/>plan summary]
+        H1 --> Ex[EXECUTOR<br/>own messages list<br/>ReAct loop]
+        Ex --> H2[Handoff dict:<br/>candidate result]
+        H2 --> Cr[CRITIC<br/>own messages list]
+        Cr --> D{critique OK?}
+        D -- yes --> A["submit_answer"]
+        D -- no, retry once --> Ex2[EXECUTOR retry<br/>with critique in context]
+        Ex2 --> A
+    end
+```
+
+#### `react_with_replan` — ReAct + cheap stall detector
+
+Standard ReAct loop. Between turns, the harness inspects the most-recent two tool calls. If the executor fired the **same selector twice in a row and both returned NO_MATCH**, the harness injects a `replan` user message before the next model call: "the selector you just retried twice is not matching anything; revise your plan."
+
+**In production:** loop-detection + recovery patterns. Agent-stall handling. The "if you see the same trace pattern twice, intervene" idea generalized.
+
+**Strengths:** cheap signal that catches the most common stall mode in the existing `react` and `minimal` traces (selector-retry-without-revision). Adds zero tools — the detection is in the harness loop body. Trigger fires ~once per stalled cell.
+
+**Weaknesses:** detection is **narrow** — it specifically catches the "two consecutive NO_MATCH on same selector" pattern. Other stall shapes (alternating between two equally-bad selectors; submitting empty fields without trying again) slip through. Not a general anti-loop solution; one specific failure-mode patch.
+
+**Use when:** traces show selector-retry stalls dominating your failure cells. Trace first; pattern-match second.
+
+```mermaid
+flowchart TB
+    subgraph rwr["react_with_replan · ReAct + stall detector"]
+        direction TB
+        S[user] --> M[model call]
+        M --> X{tool_use?}
+        X -- submit_answer --> A["submit_answer"]
+        X -- css_select --> D[dispatch + observe]
+        D --> C{same selector +<br/>NO_MATCH +<br/>prev was NO_MATCH?}
+        C -- yes --> R[inject replan<br/>user message]
+        C -- no --> M
+        R --> M
+    end
+```
+
+#### `self_consistency` — sample 5 at T=0.7, vote
+
+Five independent samples of `single_shot` at temperature=0.7 (vs the otherwise-frozen temperature=0). For HTML extraction: per-field majority vote across the five sample dicts (so one sample's wrong field doesn't tank the whole record). For code-gen: AST-normalize each sample (strip whitespace + comments via `ast.parse` → `ast.unparse`), majority over the normalized strings, return the raw text of the winning sample.
+
+**In production:** Wang et al. 2022, "Self-Consistency Improves Chain of Thought." The OG sample-and-vote pattern.
+
+**Strengths:** resilient to one-off model errors. Per-field voting (per CONTEXT decision #4) means a single wrong field on a single sample doesn't propagate. Composable with anything: wrap any baseline harness in self-consistency and it gets harder to single-error.
+
+**Weaknesses:** **5× the cost** of a single sample harness. Wang et al. showed the largest gains on weaker models; on a model that already nails first-shot accuracy, the extra 4 samples are pure overhead. The asymmetry between HTML voting (per-field) and code-gen voting (whole-string after AST-normalize) is a documented choice — code-gen partial-merging would produce uncompilable Frankencode.
+
+**Use when:** failure rate is dominated by stochastic model errors (the model gets it right "most of the time" but flips occasionally). Don't use when failures are systematic — voting on consistently-wrong samples just confirms the wrong answer.
+
+```mermaid
+flowchart LR
+    subgraph sc["self_consistency · 5 samples @ T=0.7, vote"]
+        direction LR
+        T[user + task] --> S1["sample 1 @ T=0.7"]
+        T --> S2["sample 2 @ T=0.7"]
+        T --> S3["sample 3 @ T=0.7"]
+        T --> S4["sample 4 @ T=0.7"]
+        T --> S5["sample 5 @ T=0.7"]
+        S1 --> V[per-field majority HTML<br/>or AST-normalized<br/>majority code]
+        S2 --> V
+        S3 --> V
+        S4 --> V
+        S5 --> V
+        V --> A["submit_answer"]
+    end
+```
+
+#### `program_aided` — run_python during reasoning
+
+Code-gen-only. The model gets a `run_python` tool that writes the code to a tempfile and runs it via `subprocess.run` with a 5-second timeout (capturing stdout + stderr). Use case: model writes a candidate, runs it on its own example inputs, sees the actual output, revises if wrong, finally calls `submit_answer` with the corrected code.
+
+**In production:** Gao et al. 2022 "PaL: Program-Aided Language Models." Distinct from `test_driven` because execution happens **during reasoning** (model verifies intermediate values), not as graded validation.
+
+**Strengths:** lets the model catch off-by-one errors, edge cases, and silent type bugs that pattern-matching from training would miss. The 5s timeout matches the existing `run_tests` security model — same safety pattern as `test_driven`'s subprocess execution.
+
+**Weaknesses:** small models often **skip `run_python` entirely** (Pitfall 7 in the project's pitfall log — weaker models tend to write code and submit immediately rather than verify). 5-second subprocess overhead per call. Cleanly rejects `html_extract` tasks (registered for code-gen only).
+
+**Use when:** code-gen tasks have non-trivial example inputs/outputs worth checking, AND the model in use will actually engage with the verify-then-submit pattern. On weaker models the tool sits unused.
+
+```mermaid
+flowchart TB
+    subgraph pal["program_aided · run_python during reasoning"]
+        direction TB
+        T[user + task] --> M[model call]
+        M --> X{tool_use?}
+        X -- run_python --> P["subprocess.run<br/>5s timeout<br/>capture stdout/stderr"]
+        P --> M
+        X -- submit_answer --> A["submit_answer(code)"]
+    end
+```
+
+#### `tool_use_with_validation` — jsonschema-validate every tool call
+
+Every non-submit tool call gets validated against the JSON schema declared in `tools.py` (using `jsonschema.Draft202012Validator` pre-built per tool at module load). Schema violation → structured error tool_result back to the model. Up to 3 retries; on the fourth violation the harness fails the cell with `stop_reason='schema_validation_exhausted'` (a new stop reason added for this harness). `submit_answer` is intentionally NOT validated — design choice per CONTEXT decision #6 to keep schema-as-output-contract enforcement separate from grading.
+
+**In production:** Pydantic-style argument validation. Defensive tool dispatch — assume the model will try malformed args and structurally reject them rather than letting bad payloads reach the dispatcher.
+
+**Strengths:** turns schema bugs into **measurable** failures (the new stop_reason makes them legible in summary stats). Isolates schema violations from runtime tool errors — when validation passes, the dispatcher can assume well-formed args. Reuses the existing tool schemas; zero new infrastructure.
+
+**Weaknesses:** rejects valid-but-loose payloads that `single_shot`'s `str()` cast would forgive — e.g., an integer in a string-typed field (Pitfall 5). The strictness is a feature for measurement but a friction point for "make it work" mode. Three retries mean a worst-case cell pays ~3× the tokens of a one-shot version.
+
+**Use when:** tool schemas are stable and you want schema violations to be a first-class failure mode in your eval, not a silent miscoercion.
+
+```mermaid
+flowchart TB
+    subgraph tuv["tool_use_with_validation · jsonschema-validate every tool call"]
+        direction TB
+        M[model call] --> X{tool_use}
+        X --> V[jsonschema.validate<br/>against TOOL_SCHEMAS]
+        V -- valid --> D[dispatch tool]
+        D --> M
+        V -- invalid --> E[structured error<br/>tool_result]
+        E --> R{retry < 3?}
+        R -- yes --> M
+        R -- no --> F[stop_reason:<br/>schema_validation_exhausted]
+    end
+```
+
+#### `streaming_react` — break stream early on submit_answer
+
+ReAct loop using **streaming** model responses. The harness consumes chunks as they arrive (Anthropic `content_block_start` events; Ollama `message.tool_calls` aggregation). The moment a `submit_answer` tool_use start is detected mid-stream, the harness breaks the stream early — no waiting for the model to finish trailing prose.
+
+**In production:** Anthropic streaming tool-use early-termination. The optimization: when the model emits `submit_answer` followed by polite trailing text, you don't need the trailing text — kill the stream.
+
+**Strengths:** wall-clock latency reduction when models tend to emit long-tail prose after the final tool call. The implementation handles both Anthropic (event-based) and Ollama (chunk-aggregation) backends.
+
+**Weaknesses:** **NOT MATRIX-VALIDATED** on the current local backend. The freeze-time verification (`08-05-VERIFY.md`) found the configured Ollama backend cannot host `glm-4.7-flash` on this hardware: the model declares 23.4 GiB system memory; the host has 6.9 GiB available. The failure mode differs from the predicted Ollama issue [#13840](https://github.com/ollama/ollama/issues/13840) (post-tool-call generation halt) but the practical implication is identical — the harness is registered with `task_type=[]` (excluded from the local-model matrix). The implementation exists, all unit tests pass, AST seal passes; only the operational cell run is missing. A future Anthropic-backend run, or any host with sufficient memory for the configured model, would be able to matrix-validate it.
+
+**Use when:** model frequently emits trailing prose after `submit_answer` AND your backend supports streaming tool-use semantics reliably. On `glm-4.7-flash` via local Ollama, this harness is "implemented but unmatrixed" — see methodology section below.
+
+```mermaid
+flowchart LR
+    subgraph sr["streaming_react · break stream on submit_answer detection"]
+        direction LR
+        M[model call streaming] --> C[consume chunks]
+        C --> D{submit_answer<br/>tool_use detected?}
+        D -- no --> C
+        D -- yes --> B[break stream early]
+        B --> A["submit_answer"]
+    end
+```
+
+#### `cached_react` — cell-scoped tool-result memoization
+
+Standard ReAct loop with one twist: a **local-variable** cache keyed on `(html_hash, selector)` lives inside the `_execute` method. When the model fires the same selector twice on the same page within one cell, the second call returns the cached result instantly (`cache_hit=True` in the trace) instead of re-running the dispatcher. The cache is a function-local dict — explicitly **not** an instance attribute, so it cannot leak across cells or seeds (a structural test asserts `not hasattr(harness, 'cache')`).
+
+**In production:** in-memory result memoization, scoped narrowly. Cell-scoped only — no cross-cell or cross-seed savings, by design.
+
+**Strengths:** collapses wall-clock cost of repeated selectors within a cell. Useful framing: this harness shows what `react` *would* cost if its tool calls were free. The `cache_hit` signal is observable in the trace, so you can quantify how much repeat work the baseline does.
+
+**Weaknesses:** **cell-scoped only** — the cache resets between (harness, task, seed) cells to preserve seed independence. The cache-hit count is a measurement of model behavior (does this model re-fire the same selector?), not a tool-cost reduction strategy you'd ship to production. Per CONTEXT decision #8, the article framing must NOT claim cross-run cost savings — only within-cell amortization. Cross-cell caching would break the statistical model.
+
+**Use when:** traces show high selector-retry rates within a cell, AND you want to quantify the "what if tool calls were free" counterfactual. As a production caching strategy this is intentionally narrow; a real production cache would be cross-cell.
+
+```mermaid
+flowchart TB
+    subgraph cr["cached_react · cell-scoped (html_hash, selector) cache"]
+        direction TB
+        M[model call] --> X{tool_use?}
+        X -- css_select --> C{key in<br/>local cache?}
+        C -- hit --> H[return cached result<br/>cache_hit=True]
+        C -- miss --> D[dispatch + cache result]
+        H --> M
+        D --> M
+        X -- submit_answer --> A["submit_answer"]
+    end
+```
+
+### Framework mapping for the new harnesses
+
+The original 8 harnesses each map to a recognizable agent-engineering pattern. So do these 8:
+
+- `tree_of_thoughts` → **Yao et al. 2023** (Tree of Thoughts paper; this harness uses heuristic scoring instead of model self-eval)
+- `multi_agent` → **CrewAI / AutoGen / LangGraph** multi-agent topologies (isolated histories, structured handoffs)
+- `react_with_replan` → **loop-detection + recovery** patterns (stall-detector with cheap intervention)
+- `self_consistency` → **Wang et al. 2022** (Self-Consistency Improves Chain of Thought)
+- `program_aided` → **Gao et al. 2022** (PaL: Program-Aided Language Models — execution during reasoning, not after)
+- `tool_use_with_validation` → **Pydantic-style argument validation** / defensive tool dispatch with retry budget
+- `streaming_react` → **Anthropic streaming tool-use early-termination** (mid-stream break on tool detection)
+- `cached_react` → **in-memory result memoization** (cell-scoped — explicitly NOT a cross-run cache)
+
+Combined with the original 8, the matrix design space now covers: zero-framework (`single_shot`), canonical loops (`react`, `minimal`), planning (`plan_execute`), self-critique (`reflexion`), reasoning (`chain_of_thought`), test-driven loops (`test_driven`, `retry_on_fail`), candidate generation (`tree_of_thoughts`), multi-agent topologies (`multi_agent`), stall recovery (`react_with_replan`), sample voting (`self_consistency`), program-aided reasoning (`program_aided`), defensive tool dispatch (`tool_use_with_validation`), streaming optimization (`streaming_react`), and result memoization (`cached_react`).
+
+**16 harnesses, 11 patterns covered**, one frozen model. Future numerical work against the freeze tag `2af30fc` would extend Part 1 and Part 2 tables to cover this expanded set.
+
+---
+
+## Phase 8: harness expansion without matrix rerun
+
+The 8 harnesses above are **implemented and tested but not numerically benchmarked in this article**. The freeze tag has moved (`9977e85` → `2af30fc`); the per-file SHAs of all 16 harnesses + `tools.py` + `model.py` at the new tag are recorded in [`HARNESSES_FROZEN.md`](../HARNESSES_FROZEN.md). `pytest -q` is 87/87 GREEN at `2af30fc`.
+
+What's **missing** is a fresh matrix run of all 16 harnesses on the same `glm-4.7-flash` baseline. The constraint:
+
+1. **`glm-4.7-flash` declares 23.4 GiB system memory.** The host I'm using has 6.9 GiB free. Ollama refuses to load the model (status code 500: "model requires more system memory (23.4 GiB) than is available (6.9 GiB)"). This is the same memory ceiling that excludes `streaming_react` from the local-model matrix per `08-05-VERIFY.md`.
+
+2. **Smoke test on `mistral:7b` was below the tool-use floor.** A 10-cell smoke test on `mistral:7b` (which loads cleanly on this hardware) scored 0/5 across all sampled cells — the model produced output that the schema-enforced `submit_answer` channel rejected. A full matrix on `mistral:7b` would produce a uniform 0% table, which would mislead more than inform: the failure mode is "model can't reliably emit valid tool-use payloads," not "harness-design effects on this model are measured to be zero."
+
+The honest answer: the 8 new harnesses are implemented at the freeze tag but the matrix re-run is gated on hardware that can host `glm-4.7-flash` (24+ GiB free system memory) OR on a separate methodology shift to a different frozen model. Both options are out of scope for this article refresh.
+
+**What this means for a practitioner:** if you have stronger hardware available, you can clone the repo at tag `harnesses-frozen` (commit `2af30fc`), run `python scripts/run_full.py --seeds 3 --yes` and `python scripts/run_code_benchmark.py --seeds 3 --yes`, and produce comparable numbers for all 16 harnesses against the same prompts, fixtures, grader, and tool schemas this article uses for the 8 in Part 1 and Part 2. The freeze tag and per-file SHAs in `HARNESSES_FROZEN.md` ensure the harness code is byte-identical to the design intent here.
+
+The 2026-04-23 numbers in Part 1 and Part 2 below remain valid — they came from a real `glm-4.7-flash` matrix on the prior 8-harness set, against the prior freeze tag (`9977e85`), and Phase 8 implementation work did not touch the gated files in a way that retroactively invalidates them. Per `HARNESSES_FROZEN.md`'s "tag moves" log: no matrix had been re-run against the prior tag with the **expanded** registry, so the move from `9977e85` → `2af30fc` invalidates **nothing** in the prior matrix; it just unlocks future runs against the expanded set.
 
 ---
 
@@ -560,6 +822,6 @@ Everything reproduces locally. Zero API dollars. The run files for the numbers i
 - [`HARNESSES_FROZEN.md`](../HARNESSES_FROZEN.md) — freeze manifest + tag-move log
 - [`README.md`](../README.md) — quickstart, pre-registered hypothesis
 - Raw trace data lives in `traces/{harness}/{task}/*.jsonl`; every number here reproducible via `python scripts/make_chart.py` on a committed run file
-- Freeze commit: `9977e85` (`git rev-parse harnesses-frozen`)
+- Freeze tag at article-publish time: `9977e85` (numbers in Part 1 + Part 2 from this tag). Current freeze tag: `2af30fc` (16-harness expansion; future matrix runs at this SHA produce comparable numbers for all 16 harnesses). `git rev-parse harnesses-frozen` resolves to the current tag SHA.
 
 </details>
