@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 5: Matrix Execution** - One-shot operational run of 5 harnesses x 5 tasks x N seeds under the freeze tag *(deferred to user — API spend gated)*
 - [ ] **Phase 6: Article Polish** - Fill "what surprised me" from traces; embed 2-3 annotated failure traces; cite freeze SHA + run dir *(blocked on Phase 5)*
 - [x] **Phase 7: CI Expansion + Onboarding Polish** - Windows matrix for grader determinism; README quickstart aligned with CI; .gitattributes for HTML/JSONL — `54f6285`
-- [ ] **Phase 8: Expand Harness Family + Refresh Article** - Add 8 new harness strategies that map to popular agent patterns (CrewAI multi-agent, ToT paper, PaL paper, self-consistency, tool-use-with-validation, streaming early-termination, react-with-replan, cached-react); rerun both matrices; refresh article + Medium HTML.
+- [x] **Phase 8: Expand Harness Family + Refresh Article** - Add 8 new harness strategies that map to popular agent patterns (CrewAI multi-agent, ToT paper, PaL paper, self-consistency, tool-use-with-validation, streaming early-termination, react-with-replan, cached-react); rerun both matrices; refresh article + Medium HTML. (completed 2026-04-25)
 
 ## Phase Details
 
@@ -120,7 +120,7 @@ Plans:
   6. `writeup/article.md` updated: each new harness gets a structured description block matching the existing template (what-it-does / in-production / strengths / weaknesses / use-when / Mermaid diagram). Framework-mapping bullets gain entries for `multi_agent → CrewAI/AutoGen`, `tree_of_thoughts → ToT paper (Yao et al. 2023)`, `program_aided → PaL paper (Gao et al. 2022)`, `self_consistency → Wang et al. 2022`, `tool_use_with_validation → Pydantic-style validation pattern`, `streaming_react → early-termination on tool-use streams`, `cached_react → in-memory result memoization`, `react_with_replan → loop-detection + recovery`. Numerical findings folded into Part 1 (HTML) and Part 2 (code-gen) tables and prose.
   7. `writeup/article-medium.html` regenerated via `scripts/build_medium_html.py`. Diagram PNGs for the eight new harnesses exist under `writeup/diagrams/`. The matrix tables in the HTML reflect the expanded harness set.
   8. The dollar-extrapolation table in the article is recomputed against the new token-cost rows for the expanded harness set, holding the same frontier-model list-prices ($2.50/M input, $10/M output) constant for comparability.
-**Plans:** 8 plans
+**Plans:** 8/8 plans complete
 Plans:
 - [x] 08-01-PLAN.md — Foundation: jsonschema dep + run_python tool + temperature kwarg in model.py and base.py — `26e8021` `46d499e` `d45a6ac`
 - [x] 08-02-PLAN.md — HTML react-derivatives: tree_of_thoughts + react_with_replan + cached_react (cell-scoped local cache) — `815ca89` `25a9165` `bd467ae`
@@ -145,7 +145,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Matrix Execution | 0/TBD | Not started | - |
 | 6. Article Polish | 0/TBD | Not started | - |
 | 7. CI Expansion + Onboarding Polish | 0/TBD | Not started | - |
-| 8. Expand Harness Family + Refresh Article | 8/8 | Complete (qualitative-only refresh per scope pivot) | 2026-04-25 |
+| 8. Expand Harness Family + Refresh Article | 8/8 | Complete    | 2026-04-25 |
 
 ---
 *Roadmap created: 2026-04-23*
