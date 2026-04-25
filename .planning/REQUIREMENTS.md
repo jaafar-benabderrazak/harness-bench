@@ -75,7 +75,7 @@
 - [ ] **ART-02**: Numbers in article are never hand-typed — always interpolated from CSV
 - [ ] **ART-03**: "What surprised me" section is a stub the author fills in after reading traces (auto-drafter never fakes narrative)
 - [ ] **ART-04**: Article cites the freeze commit SHA and the run directory path
-- [ ] **ART-05**: Article refresh covers the Phase 8 expanded harness family (16-harness matrix); per-harness narrative updated for the agent-pattern additions; pending until 08-08 after the matrix re-runs
+- [x] **ART-05**: Article refresh covers the Phase 8 expanded harness family (16-harness matrix); per-harness narrative updated for the agent-pattern additions; pending until 08-08 after the matrix re-runs
 
 ### Trace Viewer
 
@@ -181,7 +181,7 @@
 | ART-02 | Phase 1 | Pending |
 | ART-03 | Phase 6 | Pending |
 | ART-04 | Phase 6 | Pending |
-| ART-05 | Phase 8 | Pending |
+| ART-05 | Phase 8 | Complete |
 | VIEW-01 | Phase 1 | Pending |
 | VIEW-02 | Phase 1 | Pending |
 | VIEW-03 | Phase 1 | Pending |
@@ -198,8 +198,8 @@
 - v1 requirements: 60 total (49 base + 8 HARN-08..15 + BENCH-06 + RUN-07 + ANAL-06 + ART-05)
 - Mapped to phases: 60
 - Unmapped: 0 ✓
-- Phase 8 satisfied this round: HARN-08..15, BENCH-06, RUN-07, ANAL-06 (11 requirements)
-- Pending Phase 8: ART-05 (waits on 08-08 article refresh)
+- Phase 8 satisfied this round: HARN-08..15, BENCH-06, RUN-07, ANAL-06, ART-05 (12 requirements)
+- ART-05 closed via 08-08 qualitative-only article refresh: 8 new harness blocks + framework mapping + methodology section explaining the matrix-rerun gating; numerical validation of the 8 new harnesses deferred to a future plan against freeze tag `2af30fc` on stronger hardware.
 
 ---
 *Requirements defined: 2026-04-23*
