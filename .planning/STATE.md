@@ -10,10 +10,10 @@ See: .planning/PROJECT.md (updated 2026-04-23)
 ## Current Position
 
 Phase: 8 of 8 (Expand Harness Family + Refresh Article)
-Plans complete: Phase 8 — 4 of 8 with SUMMARY (08-01 foundation + 08-02 HTML react-derivatives + 08-03 cross-task harnesses + 08-04 program_aided + tool_use_with_validation); 08-05 file commits landed but its SUMMARY.md not yet authored by its executor; Phases 1-4, 7 delivered; Phase 5 deferred to user; Phase 6 blocked on Phase 5
-Status: Phase 8 Wave 1 (foundation) shippable; Wave 2 substantially landed (tree_of_thoughts, react_with_replan, cached_react, multi_agent, self_consistency, program_aided, tool_use_with_validation); registration (08-06) and freeze-tag move (08-07) pending
+Plans complete: Phase 8 — 5 of 8 with SUMMARY (08-01 foundation + 08-02 HTML react-derivatives + 08-03 cross-task harnesses + 08-04 program_aided + tool_use_with_validation + 08-05 streaming_react + Ollama verify); Phases 1-4, 7 delivered; Phase 5 deferred to user; Phase 6 blocked on Phase 5
+Status: Phase 8 Wave 1 (foundation) shippable; Wave 2 fully landed (tree_of_thoughts, react_with_replan, cached_react, multi_agent, self_consistency, program_aided, tool_use_with_validation, streaming_react); registration (08-06) and freeze-tag move (08-07) pending
 
-Progress: [██████████] 90% (Phase 8 underway, 4 of 8 plans complete with SUMMARY)
+Progress: [███████████] 94% (Phase 8 underway, 5 of 8 plans complete with SUMMARY)
 
 ## Completed Phases
 
@@ -72,6 +72,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 08]: Plan 08-02: three HTML react-derivative harnesses (tree_of_thoughts heuristic-scored num_matches/avg_text_len, react_with_replan two-NO_MATCH-on-same-selector trigger emitting replan_triggered trace event, cached_react cell-scoped LOCAL-VARIABLE cache with structural test asserting `not hasattr(harness, 'cache')`) implemented with 8 control-flow tests; registration in HARNESSES dict + HARNESSES_BY_TASK_TYPE intentionally deferred to Plan 08-06; HARN-08 + HARN-10 + HARN-15 satisfied
 - [Phase 08]: Plan 08-03: multi_agent (3 isolated histories, Handoff TypedDict, UNION whitelist, single bounded retry) + self_consistency (N=5 @ T=0.7, per-field majority HTML, AST-normalized majority code returning raw winning sample) — both harnesses + 8 tests landed; HARN-09 + HARN-11 satisfied
 - [Phase 08]: Plan 08-04: program_aided (code-gen-only, whitelist={run_python, submit_answer}, emits program_aided_run_python trace event, rejects html_extract tasks cleanly) + tool_use_with_validation (both task types, jsonschema Draft202012Validator pre-built per tool from TOOL_SCHEMAS at module load, MAX_VALIDATION_RETRIES=3, new stop_reason='schema_validation_exhausted', submit_answer NOT validated by design) — both harnesses + 8 tests landed; HARN-12 + HARN-13 satisfied
+- [Phase 08]: Plan 08-05: streaming_react harness (Anthropic content_block_start sniff + Ollama per-chunk message.tool_calls aggregation, deferred SDK imports inside method bodies for AST-seal compliance) + scripts/verify_streaming_ollama.py probe + 08-05-VERIFY.md outcome doc; Ollama probe outcome **FAIL** (OOM: glm-4.7-flash needs 23.4 GiB, host has 6.9 GiB — failure mode differs from predicted Ollama issue #13840 post-tool-call halt, but the registration implication is identical); plan 08-06 will register streaming_react with task_type=[]; HARN-14 satisfied
 
 ### Blockers/Concerns
 
@@ -81,5 +82,5 @@ Decisions are logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-04-25
-Stopped at: Completed 08-02-PLAN.md (executed after 08-03/04 parallel work but with file commits landing earlier in time). Three HTML react-derivative harness files merged in atomic commits `815ca89` (tree_of_thoughts), `25a9165` (react_with_replan), `bd467ae` (cached_react). 8 new control-flow tests pass. AST seal clean on all three new files. Files NOT yet registered in HARNESSES dict (registration is Plan 08-06). Pre-existing `test_model_seal` failure on streaming_react.py persists — out of scope for 08-02, documented in deferred-items.md.
-Resume hook: Plan 08-06 (registration) wires all six new Wave-2 harnesses (tree_of_thoughts, react_with_replan, cached_react, multi_agent, self_consistency, program_aided, tool_use_with_validation) plus 08-05 streaming_react into HARNESSES + HARNESSES_BY_TASK_TYPE; bulk-adds HARN-08..15 rows to REQUIREMENTS.md and checks off HARN-08/09/10/11/12/13/15. Plan 08-07 (freeze-tag move) must still wait for 08-05 streaming_react seal-fix and registration to land.
+Stopped at: Completed 08-05-PLAN.md (streaming_react + Ollama verify). Three commits: `e95355a` (harness + tests), `fc6ff66` (verify script), `19824ad` (probe outcome). Probe ran in 4.5s, FAILED with OOM (glm-4.7-flash declared 23.4 GiB working set, host has 6.9 GiB available). 08-05-VERIFY.md captures the outcome. Plan 08-06's registration policy for streaming_react is deterministic now: task_type=[]. Pre-existing AST seal failure on streaming_react.py remains — plan 08-06's responsibility to relax the seal.
+Resume hook: Plan 08-06 (registration) wires all Wave-2 harnesses (tree_of_thoughts, react_with_replan, cached_react, multi_agent, self_consistency, program_aided, tool_use_with_validation, streaming_react) into HARNESSES + HARNESSES_BY_TASK_TYPE; streaming_react gets task_type=[] per 08-05-VERIFY.md; AST seal in tests/test_harness_registry.py needs relaxation for deferred imports inside method bodies; bulk-adds HARN-08..15 rows to REQUIREMENTS.md and checks off HARN-08..15 (HARN-14 already complete from 08-05). Plan 08-07 (freeze-tag move) must still wait for 08-06 to land.
