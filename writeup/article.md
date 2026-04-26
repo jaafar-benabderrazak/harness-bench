@@ -724,6 +724,22 @@ These numbers ran on a free local model (zero API dollars). If the same matrix r
 
 **Result**: **every harness scored 15/15**. These are textbook algorithm problems that `glm-4.7-flash` solves on the first try. The question shifts from "which works?" to "which is wasteful?"
 
+### Why every harness scored the same
+
+The flat 15/15 result is not a sign that harness design is universally irrelevant — it's a sign that this particular task set is at the model's accuracy ceiling. Four reinforcing mechanisms produce the uniformity:
+
+1. **The five problems are textbook algorithms the model has effectively memorized.** `fizzbuzz`, `fibonacci`, `is_anagram`, `binary_search`, and `word_count` appeared thousands of times in the training corpus of `glm-4.7-flash`. The first model call recalls a canonical solution; every downstream harness step operates on a code string that was already correct on emit.
+
+2. **The specification is fully closed.** A pytest suite is a deterministic, machine-checkable contract; the function signature pins the input/output shape exactly. There is no ambiguity for the harness to disambiguate. HTML extraction by contrast has implicit grading criteria — *which* field is "brand," *whether* a particular text run counts as the price — and that ambiguity is precisely the slack a multi-turn loop has any chance of exploiting.
+
+3. **Code generation is linear; HTML extraction is exploratory.** Writing a complete `fizzbuzz` is the natural shape of a one-pass model call. Reading a messy HTML page genuinely requires exploration (which selector, which DIV, where is the date), and exploration is where harness-design effects appear or fail to appear. A `single_shot` of HTML may miss; a `single_shot` of `fizzbuzz` cannot.
+
+4. **No tool-use floor is required.** The code-gen harnesses need at most one tool call (`submit_answer(code=...)`) to clear the bar. The HTML harnesses with multi-turn loops need five-to-twelve correctly-formatted tool calls in sequence, which is where weak-model drift accumulates. Harnesses that depend on tool-call reliability cannot even *show up* as different on code-gen — they bypass the failure mode that hurt them on HTML.
+
+This is the same conditional claim the article's "When complex harnesses DO pay" section formalizes: harness complexity earns returns only when **(a)** first-shot accuracy is below target AND **(b)** failures are multi-turn-recoverable. On these code tasks, condition (a) fails — first-shot is already at the ceiling. With no accuracy headroom, the only thing harness design can do is cost something. So the matrix collapses from "which works?" to "which is wasteful?", and the spread shows up only in wall-clock and tokens.
+
+The result generalizes only to tasks in the same regime: well-specified, deterministic grader, problems the model has memorized. Harder code (multi-file refactors, novel algorithms, ambiguous specs, debugging from a stack trace) would behave more like HTML — first-shot below the ceiling, harness design suddenly mattering again. The cataloged `program_aided` harness exists precisely for that regime; it just isn't the regime these five tasks live in. A 100%-ceiling matrix is not useless — it's an *efficiency* test, not an accuracy test, and the cost spread it surfaces is genuine engineering data for any team picking a harness when accuracy is already solved.
+
 ### Headline chart
 
 ![code-gen resource bars](resource_bars-code-glm-20260423.png)

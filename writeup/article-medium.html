@@ -479,6 +479,24 @@ reflexion         2x  article.event-details, div.event-details, ...
 <h2 id="part-2-code-generation-easy-tasks">Part 2 — Code generation (easy tasks)</h2>
 <p><strong>Task</strong>: implement 5 Python functions (fizzbuzz, fibonacci, is_anagram, binary_search, word_count) that pass a pytest suite. <strong>Deterministic grader</strong>: run the task&rsquo;s tests against the submission; success = pytest exit 0.</p>
 <p><strong>Result</strong>: <strong>every harness scored 15/15</strong>. These are textbook algorithm problems that <code>glm-4.7-flash</code> solves on the first try. The question shifts from &ldquo;which works?&rdquo; to &ldquo;which is wasteful?&rdquo;</p>
+<h3 id="why-every-harness-scored-the-same">Why every harness scored the same</h3>
+<p>The flat 15/15 result is not a sign that harness design is universally irrelevant — it&rsquo;s a sign that this particular task set is at the model&rsquo;s accuracy ceiling. Four reinforcing mechanisms produce the uniformity:</p>
+<ol>
+<li>
+<p><strong>The five problems are textbook algorithms the model has effectively memorized.</strong> <code>fizzbuzz</code>, <code>fibonacci</code>, <code>is_anagram</code>, <code>binary_search</code>, and <code>word_count</code> appeared thousands of times in the training corpus of <code>glm-4.7-flash</code>. The first model call recalls a canonical solution; every downstream harness step operates on a code string that was already correct on emit.</p>
+</li>
+<li>
+<p><strong>The specification is fully closed.</strong> A pytest suite is a deterministic, machine-checkable contract; the function signature pins the input/output shape exactly. There is no ambiguity for the harness to disambiguate. HTML extraction by contrast has implicit grading criteria — <em>which</em> field is &ldquo;brand,&rdquo; <em>whether</em> a particular text run counts as the price — and that ambiguity is precisely the slack a multi-turn loop has any chance of exploiting.</p>
+</li>
+<li>
+<p><strong>Code generation is linear; HTML extraction is exploratory.</strong> Writing a complete <code>fizzbuzz</code> is the natural shape of a one-pass model call. Reading a messy HTML page genuinely requires exploration (which selector, which DIV, where is the date), and exploration is where harness-design effects appear or fail to appear. A <code>single_shot</code> of HTML may miss; a <code>single_shot</code> of <code>fizzbuzz</code> cannot.</p>
+</li>
+<li>
+<p><strong>No tool-use floor is required.</strong> The code-gen harnesses need at most one tool call (<code>submit_answer(code=...)</code>) to clear the bar. The HTML harnesses with multi-turn loops need five-to-twelve correctly-formatted tool calls in sequence, which is where weak-model drift accumulates. Harnesses that depend on tool-call reliability cannot even <em>show up</em> as different on code-gen — they bypass the failure mode that hurt them on HTML.</p>
+</li>
+</ol>
+<p>This is the same conditional claim the article&rsquo;s &ldquo;When complex harnesses DO pay&rdquo; section formalizes: harness complexity earns returns only when <strong>(a)</strong> first-shot accuracy is below target AND <strong>(b)</strong> failures are multi-turn-recoverable. On these code tasks, condition (a) fails — first-shot is already at the ceiling. With no accuracy headroom, the only thing harness design can do is cost something. So the matrix collapses from &ldquo;which works?&rdquo; to &ldquo;which is wasteful?&rdquo;, and the spread shows up only in wall-clock and tokens.</p>
+<p>The result generalizes only to tasks in the same regime: well-specified, deterministic grader, problems the model has memorized. Harder code (multi-file refactors, novel algorithms, ambiguous specs, debugging from a stack trace) would behave more like HTML — first-shot below the ceiling, harness design suddenly mattering again. The cataloged <code>program_aided</code> harness exists precisely for that regime; it just isn&rsquo;t the regime these five tasks live in. A 100%-ceiling matrix is not useless — it&rsquo;s an <em>efficiency</em> test, not an accuracy test, and the cost spread it surfaces is genuine engineering data for any team picking a harness when accuracy is already solved.</p>
 <h3 id="headline-chart_1">Headline chart</h3>
 <p><img alt="code-gen resource bars" src="resource_bars-code-glm-20260423.png" /></p>
 <table>
