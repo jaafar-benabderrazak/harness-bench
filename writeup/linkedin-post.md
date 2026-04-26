@@ -34,7 +34,7 @@ Full writeup with charts, the 8 cataloged patterns I haven't benchmarked yet, an
 https://jaafarbenabderrazak.com/blog/agent-frameworks-benchmark
 
 Source code, runner, fixtures, and the reproducible 150-run matrix:
-github.com/jaafar-benabderrazak/harness-bench
+https://github.com/jaafar-benabderrazak/harness-bench
 
 What's the simplest baseline you've never bothered to measure?
 
