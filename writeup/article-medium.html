@@ -41,12 +41,9 @@
 <hr />
 <h2 id="the-finding-in-one-sentence">The finding, in one sentence</h2>
 <p><strong>On hard tasks, complex harnesses failed more than simple ones. On easy tasks, complex harnesses cost more than simple ones. <code>single_shot</code> won on wall-clock in both experiments.</strong></p>
-<p>On HTML extraction (hard for this model):</p>
-<p><img alt="HTML frontier" src="frontier-glm-20260423.png" /></p>
-<p><code>single_shot</code> and <code>minimal</code> tied for best at 9/15 success. <code>single_shot</code> did it in <strong>228 seconds</strong>; <code>plan_execute</code> scored 6/15 and took <strong>1,615 seconds</strong> — 7× the wall-clock for a <em>worse</em> result. <code>reflexion</code> came last at 3/15 despite spending 977 seconds of wall-clock.</p>
-<p>On code generation (easy for this model):</p>
-<p><img alt="code-gen resource bars — who's wasteful when everyone scores 100%" src="resource_bars-code-glm-20260423.png" /></p>
-<p>Every harness hit 15/15 on code-gen. <code>chain_of_thought</code> took twice single_shot&rsquo;s wall-clock for the same result. <code>test_driven</code> used 6× the input tokens.</p>
+<p>The chart below puts every benchmarked harness in a single frame: success rate on the top, wall-clock cost on the bottom, side-by-side bars for the two task types, with <code>n/a</code> where a harness was specialized to only one of the two.</p>
+<p><img alt="Eight harnesses, both tasks at a glance — success rate per (harness, task) on top; wall-clock total seconds per (harness, task) on bottom; n/a where a harness is task-type-specialized" src="unified-success-glm-20260423.png" /></p>
+<p>The two halves of the picture point the same direction. <strong>On HTML extraction</strong> (hard for this model) <code>single_shot</code> and <code>minimal</code> tied for best at 9/15 success. <code>single_shot</code> got there in <strong>228 seconds</strong>; <code>plan_execute</code> scored 6/15 and took <strong>1,615 seconds</strong> — seven times the wall-clock for a worse result. <code>reflexion</code> came last at 3/15 despite burning 977 seconds. <strong>On code generation</strong> (easy for this model) every harness hit 15/15 — <code>chain_of_thought</code> took roughly twice <code>single_shot</code>&rsquo;s wall-clock for the same result; <code>test_driven</code> used six times the input tokens.</p>
 <p>Harness complexity costs something. In both experiments, on this model, it didn&rsquo;t buy anything back.</p>
 <hr />
 <h2 id="why-this-experiment-exists">Why this experiment exists</h2>

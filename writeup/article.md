@@ -48,17 +48,11 @@ Same model. Two task types. **Sixteen harnesses total** — eight benchmarked en
 
 **On hard tasks, complex harnesses failed more than simple ones. On easy tasks, complex harnesses cost more than simple ones. `single_shot` won on wall-clock in both experiments.**
 
-On HTML extraction (hard for this model):
+The chart below puts every benchmarked harness in a single frame: success rate on the top, wall-clock cost on the bottom, side-by-side bars for the two task types, with `n/a` where a harness was specialized to only one of the two.
 
-![HTML frontier](frontier-glm-20260423.png)
+![Eight harnesses, both tasks at a glance — success rate per (harness, task) on top; wall-clock total seconds per (harness, task) on bottom; n/a where a harness is task-type-specialized](unified-success-glm-20260423.png)
 
-`single_shot` and `minimal` tied for best at 9/15 success. `single_shot` did it in **228 seconds**; `plan_execute` scored 6/15 and took **1,615 seconds** — 7× the wall-clock for a *worse* result. `reflexion` came last at 3/15 despite spending 977 seconds of wall-clock.
-
-On code generation (easy for this model):
-
-![code-gen resource bars — who's wasteful when everyone scores 100%](resource_bars-code-glm-20260423.png)
-
-Every harness hit 15/15 on code-gen. `chain_of_thought` took twice single_shot's wall-clock for the same result. `test_driven` used 6× the input tokens.
+The two halves of the picture point the same direction. **On HTML extraction** (hard for this model) `single_shot` and `minimal` tied for best at 9/15 success. `single_shot` got there in **228 seconds**; `plan_execute` scored 6/15 and took **1,615 seconds** — seven times the wall-clock for a worse result. `reflexion` came last at 3/15 despite burning 977 seconds. **On code generation** (easy for this model) every harness hit 15/15 — `chain_of_thought` took roughly twice `single_shot`'s wall-clock for the same result; `test_driven` used six times the input tokens.
 
 Harness complexity costs something. In both experiments, on this model, it didn't buy anything back.
 
